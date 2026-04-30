@@ -1,0 +1,144 @@
+import re
+
+
+class SolidityASTParser:
+    """
+    Regex-based Solidity source code parser.
+    Extracts functions, modifiers, state variables, and events
+    to build a lightweight AST for downstream analysis.
+    """
+
+    FUNCTION_RE = re.compile(
+        r'function\s+(\w+)\s*\(([^)]*)\)'
+        r'((?:\s+(?:public|private|internal|external|view|pure|payable|'
+        r'virtual|override|onlyOwner|\w+))*)'
+        r'(?:\s+returns\s*\([^)]*\))?'
+        r'\s*[{;]',
+        re.MULTILINE
+    )
+
+    STATE_VAR_RE = re.compile(
+        r'^\s*(address|uint\d*|int\d*|bool|bytes\d*|string|mapping\([^)]+\))'
+        r'(?:\s+(?:public|private|internal|constant|immutable))*'
+        r'\s+(\w+)\s*(?:=\s*[^;]+)?;',
+        re.MULTILINE
+    )
+
+    EVENT_RE = re.compile(r'event\s+(\w+)\s*\(([^)]*)\)', re.MULTILINE)
+    MODIFIER_RE = re.compile(r'modifier\s+(\w+)\s*\(', re.MULTILINE)
+    REQUIRE_RE = re.compile(r'\b(require|assert)\s*\(([^;]+)\);', re.MULTILINE)
+    CALL_RE = re.compile(
+        r'\b(\w+)\.(call|transfer|send|delegatecall|staticcall)\s*[({]',
+        re.MULTILINE
+    )
+
+    def parse(self, source: str) -> dict:
+        if not source or not source.strip():
+            return {"functions": [], "state_vars": [], "events": [], "modifiers": [], "warnings": []}
+
+        functions = []
+        warnings = []
+
+        for m in self.FUNCTION_RE.finditer(source):
+            name = m.group(1)
+            params_raw = m.group(2).strip()
+            modifier_block = m.group(3) if m.group(3) else ""
+
+            modifiers = self._extract_modifiers(modifier_block)
+            visibility = self._extract_visibility(modifier_block)
+            mutability = self._extract_mutability(modifier_block)
+            params = self._parse_params(params_raw)
+
+            body_start = m.end()
+            _, body_text = self._extract_body(source, body_start)
+
+            external_calls = self._find_external_calls(body_text)
+            requires = self._find_requires(body_text)
+            has_reentrancy_risk = self._check_reentrancy_risk(body_text)
+
+            fn = {
+                "name": name,
+                "params": params,
+                "visibility": visibility,
+                "mutability": mutability,
+                "modifiers": modifiers,
+                "external_calls": external_calls,
+                "requires": requires,
+                "has_reentrancy_risk": has_reentrancy_risk,
+                "raw": m.group(0)
+            }
+            functions.append(fn)
+
+            if has_reentrancy_risk and "onlyOwner" not in modifiers and "nonReentrant" not in modifiers:
+                warnings.append(f"[REENTRANCY] '{name}' makes external calls without reentrancy guard")
+            if visibility == "public" and "payable" in mutability and not requires:
+                warnings.append(f"[UNCHECKED_PAYMENT] '{name}' is public payable with no require guards")
+
+        state_vars = [
+            {"type": m.group(1), "name": m.group(2)}
+            for m in self.STATE_VAR_RE.finditer(source)
+        ]
+        events = [{"name": m.group(1), "params_raw": m.group(2)} for m in self.EVENT_RE.finditer(source)]
+        modifiers_declared = [m.group(1) for m in self.MODIFIER_RE.finditer(source)]
+
+        return {
+            "functions": functions,
+            "state_vars": state_vars,
+            "events": events,
+            "modifiers": modifiers_declared,
+            "warnings": warnings
+        }
+
+    def _extract_modifiers(self, block: str) -> list:
+        skip = {"public", "private", "internal", "external", "view", "pure", "payable", "virtual", "override"}
+        return [t for t in block.split() if t not in skip]
+
+    def _extract_visibility(self, block: str) -> str:
+        for v in ("public", "external", "internal", "private"):
+            if v in block.split():
+                return v
+        return "default"
+
+    def _extract_mutability(self, block: str) -> list:
+        return [m for m in ("view", "pure", "payable", "virtual", "override") if m in block.split()]
+
+    def _parse_params(self, raw: str) -> list:
+        if not raw.strip():
+            return []
+        params = []
+        for part in raw.split(","):
+            tokens = part.strip().split()
+            if len(tokens) >= 2:
+                params.append({"type": tokens[0], "name": tokens[-1]})
+            elif tokens:
+                params.append({"type": tokens[0], "name": "_"})
+        return params
+
+    def _extract_body(self, source: str, start: int):
+        depth, i, body_start = 0, start, None
+        while i < len(source):
+            c = source[i]
+            if c == '{':
+                if body_start is None:
+                    body_start = i
+                depth += 1
+            elif c == '}':
+                depth -= 1
+                if depth == 0 and body_start is not None:
+                    return i + 1, source[body_start:i + 1]
+            i += 1
+        return start, ""
+
+    def _find_external_calls(self, body: str) -> list:
+        return [{"target": m.group(1), "method": m.group(2)} for m in self.CALL_RE.finditer(body)]
+
+    def _find_requires(self, body: str) -> list:
+        return [m.group(2).strip() for m in self.REQUIRE_RE.finditer(body)]
+
+    def _check_reentrancy_risk(self, body: str) -> bool:
+        call_pos = [m.start() for m in self.CALL_RE.finditer(body)]
+        write_pos = [m.start() for m in re.finditer(
+            r'\b(balances|vault|_balances|_totalSupply)\s*[\[\-\+]', body)]
+        if not call_pos or not write_pos:
+            return False
+        return min(call_pos) < max(write_pos)
