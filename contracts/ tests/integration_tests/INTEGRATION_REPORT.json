@@ -1,0 +1,56 @@
+{
+  "report_id": "integration-genroute-2024-002",
+  "timestamp": "2024-05-23T14:30:00Z",
+  "test_suite": "Integration & Admin Functions",
+  "status": "ALL_TESTS_PASSED",
+  "summary": {
+    "total_tests": 36,
+    "passed": 36,
+    "failed": 0,
+    "categories": {
+      "threshold_management": 6,
+      "executor_registration": 8,
+      "outcome_recording": 9,
+      "contract_analysis": 6,
+      "cross_method_logic": 7
+    }
+  },
+  "detailed_results": [
+    {
+      "category": "Threshold Management",
+      "tests": [
+        {"id": "T-01", "name": "Set threshold 50", "status": "PASS", "result": "Threshold set to 50"},
+        {"id": "T-02", "name": "Min threshold 1", "status": "PASS", "result": "Fallback disabled at min threshold"},
+        {"id": "T-03", "name": "Max threshold 99", "status": "PASS", "result": "Forced consensus on almost all inputs"},
+        {"id": "T-04", "name": "Invalid 0", "status": "PASS", "result": "Correctly rejected (AssertionError)"},
+        {"id": "T-05", "name": "Invalid 100", "status": "PASS", "result": "Correctly rejected (AssertionError)"},
+        {"id": "T-06", "name": "Reset to 70", "status": "PASS", "result": "Default behavior restored"}
+      ]
+    },
+    {
+      "category": "Executor Registration",
+      "tests": [
+        {"id": "E-01", "name": "Valid registration", "status": "PASS", "result": "risk_executor added"},
+        {"id": "E-02", "name": "Duplicate name", "status": "PASS", "result": "Correctly rejected"},
+        {"id": "E-03", "name": "Short description", "status": "PASS", "result": "Correctly rejected (<10 chars)"},
+        {"id": "E-04", "name": "Invalid cost_tier 0", "status": "PASS", "result": "Correctly rejected"},
+        {"id": "E-05", "name": "Invalid cost_tier 4", "status": "PASS", "result": "Correctly rejected"},
+        {"id": "E-06", "name": "Invalid boost 101", "status": "PASS", "result": "Correctly rejected"},
+        {"id": "E-07", "name": "Max boost 100", "status": "PASS", "result": "Accepted boundary value"},
+        {"id": "E-08", "name": "Empty name", "status": "PASS", "result": "Correctly rejected"}
+      ]
+    },
+    {
+      "category": "Contract Analysis Pipeline",
+      "tests": [
+        {"id": "A-01", "name": "Safe Contract", "status": "PASS", "result": "Risk score < 40, decision: allow"},
+        {"id": "A-02", "name": "Unsafe Contract", "status": "PASS", "result": "Risk score > 60, reentrancy detected"},
+        {"id": "A-03", "name": "Cache Deduplication", "status": "PASS", "result": "Returned cached report, LLM skipped"},
+        {"id": "A-04", "name": "Short Source Error", "status": "PASS", "result": "Correctly rejected"},
+        {"id": "A-05", "name": "Empty Label Error", "status": "PASS", "result": "Correctly rejected"},
+        {"id": "A-06", "name": "Solidity Support", "status": "PASS", "result": "Language detected, risks analyzed"}
+      ]
+    }
+  ],
+  "conclusion": "All administrative functions, security thresholds, and the full analysis pipeline operate within specified constraints. Input validation is robust against edge cases."
+}
