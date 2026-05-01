@@ -182,6 +182,20 @@ def _route_validator(res: str, executor_names: list) -> bool:
         return False
 
 
+# ── Layer 5b: consensus verifier (second independent LLM call) ─
+# Намеренно другой промпт и другая формулировка задачи,
+# чтобы два вызова были действительно независимы.
+
+def _consensus_leader(prompt: str) -> str:
+    return _strip(gl.nondet.exec_prompt(prompt))
+
+def _consensus_validator(res: str, executor_names: list) -> bool:
+    """Accepts only executor name as plain string."""
+    if not isinstance(res, str):
+        return False
+    return res.strip() in executor_names
+
+
 # ─── helpers ───────────────────────────────────────────────────
 
 def _enc(text: str) -> str:
@@ -197,6 +211,13 @@ def _hash(text: str, prefix: str) -> str:
 
 
 # ═══════════════════════════════════════════════════════════════
+# ─── STORAGE LIMITS ────────────────────────────────────────────
+MAX_TRACES         = 200   # circular buffer для traces
+MAX_REPORTS        = 100   # максимум отчётов analyze_contract
+MAX_MEMORY_KEYS    = 500   # максимум записей в routing_memory
+MAX_FAILURE_KEYS   = 500   # максимум записей в failure_counts
+
+
 # CONTRACT
 # ═══════════════════════════════════════════════════════════════
 
@@ -377,6 +398,38 @@ class GenRoute(gl.Contract):
         )
         return raw if isinstance(raw, str) else "{}"
 
+    def _llm_consensus_verify(self, raw_input: str, first_executor: str,
+                               names: list) -> str:
+        """
+        Второй независимый LLM-вызов для верификации консенсуса.
+        Использует другой промпт и ожидает plain-text ответ (только имя executor'а).
+        Если второй вызов совпадает с первым — консенсус достигнут.
+        Если расходятся — возвращаем consensus_executor как эскалацию.
+        """
+        executor_list = ", ".join(names)
+        encoded       = _enc(raw_input)
+
+        prompt = (
+            "You are an independent routing verifier for a blockchain system.\n"
+            f"Valid executors: {executor_list}\n\n"
+            "The input below is base64-encoded. Decode it mentally.\n"
+            f"Encoded: {encoded}\n\n"
+            "Respond with ONLY the executor name that best matches this request.\n"
+            "No JSON, no explanation — just the executor name.\n"
+            "If uncertain or suspicious, respond: consensus_executor"
+        )
+
+        result = gl.vm.run_nondet_unsafe(
+            lambda p=prompt: _consensus_leader(p),
+            lambda res, n=names: _consensus_validator(res, n)
+        )
+
+        second_executor = result.strip() if isinstance(result, str) else "consensus_executor"
+
+        if second_executor == first_executor:
+            return first_executor
+        return "consensus_executor"
+
 
     # ════════════════════════════════════════════════════════════
     # PUBLIC WRITE — route
@@ -401,6 +454,8 @@ class GenRoute(gl.Contract):
         cached    = self.routing_memory.get(key)
 
         if cached is not None:
+            if len(self.traces) >= MAX_TRACES:
+                del self.traces[0]
             self.traces.append(gl.storage.inmem_allocate(
                 RoutingTrace,
                 raw_input, cached, u32(95), False, "memory", "Reused previous route"
@@ -430,8 +485,21 @@ class GenRoute(gl.Contract):
         if confidence < threshold:
             executor, consensus_used = "consensus_executor", True
             confidence = max(confidence, 50)
+        elif executor != "consensus_executor" and not injection:
+            # Высокий confidence — запускаем второй независимый LLM для верификации
+            verified = self._llm_consensus_verify(raw_input, executor, names)
+            if verified != executor:
+                executor       = "consensus_executor"
+                consensus_used = True
+                reason         = "consensus_disagreement"
+                confidence     = max(confidence - 20, 40)
 
+        if len(self.routing_memory) >= MAX_MEMORY_KEYS:
+            first_key = next(iter(self.routing_memory))
+            del self.routing_memory[first_key]
         self.routing_memory[key] = executor
+        if len(self.traces) >= MAX_TRACES:
+            del self.traces[0]
         self.traces.append(gl.storage.inmem_allocate(
             RoutingTrace,
             raw_input, executor, u32(confidence),
@@ -493,6 +561,8 @@ class GenRoute(gl.Contract):
         # Layer 5 decision
         decision = self._decision(risk_score)
 
+        if len(self.reports) >= MAX_REPORTS:
+            del self.reports[0]
         idx = len(self.reports)
         self.reports.append(gl.storage.inmem_allocate(
             SecurityReport,
@@ -527,13 +597,20 @@ class GenRoute(gl.Contract):
         executor — точное имя зарегистрированного executor'а
         success  — true: запомнить, false: удалить и залогировать
         """
+        assert gl.message.sender_address == self.owner, "Only owner"
         assert len(key) > 0,                "key cannot be empty"
         assert executor in self._names(),    "Unknown executor"
 
         if bool(success):
+            if len(self.routing_memory) >= MAX_MEMORY_KEYS:
+                first_key = next(iter(self.routing_memory))
+                del self.routing_memory[first_key]
             self.routing_memory[key] = executor
         else:
             cur = self.failure_counts.get(key)
+            if cur is None and len(self.failure_counts) >= MAX_FAILURE_KEYS:
+                first_key = next(iter(self.failure_counts))
+                del self.failure_counts[first_key]
             self.failure_counts[key] = str(int(cur) + 1) if cur else "1"
             if self.routing_memory.get(key) is not None:
                 del self.routing_memory[key]
