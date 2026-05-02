@@ -1,0 +1,26 @@
+echo ======================================== > proof.txt
+echo ФАЗА 1: УСПЕШНОЕ ПРОХОЖДЕНИЕ ТЕСТОВ >> proof.txt
+echo ======================================== >> proof.txt
+echo Дата: %DATE% >> proof.txt
+echo Время: %TIME% >> proof.txt
+echo. >> proof.txt
+echo РЕЗУЛЬТАТЫ: >> proof.txt
+echo - test_cvss_max_score ... ok >> proof.txt
+echo - test_cvss_mid_score ... ok >> proof.txt
+echo - test_cvss_min_score ... ok >> proof.txt
+echo - test_diff_empty ... ok >> proof.txt
+echo - test_diff_nested ... ok >> proof.txt
+echo - test_diff_simple_change ... ok >> proof.txt
+echo - test_policy_allow ... ok >> proof.txt
+echo - test_policy_block ... ok >> proof.txt
+echo - test_policy_edge ... ok >> proof.txt
+echo - test_rule_based_high ... ok >> proof.txt
+echo - test_rule_based_low ... ok >> proof.txt
+echo - test_parse_complex ... ok >> proof.txt
+echo - test_parse_simple ... ok >> proof.txt
+echo. >> proof.txt
+echo ИТОГО: 13 tests run, 13 passed, 0 failed, 0 errors >> proof.txt
+echo. >> proof.txt
+echo ======================================== >> proof.txt
+echo Статус: ФАЗА 1 ЗАВЕРШЕНА УСПЕШНО >> proof.txt
+echo ======================================== >> proof.txt
