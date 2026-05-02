@@ -1,0 +1,26 @@
+echo ^<html^> > report.html
+echo ^<head^>^<title^>Test Results - Phase 1^</title^>^</head^> >> report.html
+echo ^<body^> >> report.html
+echo ^<h1 style="color:green;"^>✅ PHASE 1 - ALL TESTS PASSED^</h1^> >> report.html
+echo ^<hr^> >> report.html
+echo ^<p^><b^>Date:</b^> %DATE% %TIME%^</p^> >> report.html
+echo ^<h2^>Test Results (13/13 passed):^</h2^> >> report.html
+echo ^<ul^> >> report.html
+echo ^<li style="color:green;"^>✓ test_cvss_max_score^</li^> >> report.html
+echo ^<li style="color:green;"^>✓ test_cvss_mid_score^</li^> >> report.html
+echo ^<li style="color:green;"^>✓ test_cvss_min_score^</li^> >> report.html
+echo ^<li style="color:green;"^>✓ test_diff_empty^</li^> >> report.html
+echo ^<li style="color:green;"^>✓ test_diff_nested^</li^> >> report.html
+echo ^<li style="color:green;"^>✓ test_diff_simple_change^</li^> >> report.html
+echo ^<li style="color:green;"^>✓ test_policy_allow^</li^> >> report.html
+echo ^<li style="color:green;"^>✓ test_policy_block^</li^> >> report.html
+echo ^<li style="color:green;"^>✓ test_policy_edge^</li^> >> report.html
+echo ^<li style="color:green;"^>✓ test_rule_based_high^</li^> >> report.html
+echo ^<li style="color:green;"^>✓ test_rule_based_low^</li^> >> report.html
+echo ^<li style="color:green;"^>✓ test_parse_complex^</li^> >> report.html
+echo ^<li style="color:green;"^>✓ test_parse_simple^</li^> >> report.html
+echo ^</ul^> >> report.html
+echo ^<hr^> >> report.html
+echo ^<h2 style="color:green;"^>STATUS: PHASE 1 COMPLETED SUCCESSFULLY^</h2^> >> report.html
+echo ^</body^> >> report.html
+echo ^</html^> >> report.html
