@@ -1,42 +1,64 @@
-(
-echo import json
-echo import os
-echo.
-echo def run_phase2_verification():
-echo     report_path = os.path.join(os.path.dirname(__file__), 'INTEGRATION_REPORT_PHASE2.json')
-echo     if not os.path.exists(report_path^):
-echo         print("ERROR: INTEGRATION_REPORT_PHASE2.json not found!")
-echo         return False
-echo     with open(report_path, 'r') as f:
-echo         data = json.load(f)
-echo     print("=" * 50)
-echo     print("PHASE 2 - MANUAL TESTING VERIFICATION")
-echo     print("=" * 50)
-echo     print(f"Report ID: {data['report_id']}")
-echo     print(f"Status: {data['status']}")
-echo     print("-" * 50)
-echo     total_passed = 0
-echo     total_failed = 0
-echo     for category in data['detailed_results']:
-echo         cat_name = category['category']
-echo         print(f"\nCategory: {cat_name}")
-echo         for test in category['tests']:
-echo             if test['status'] == 'PASS':
-echo                 print(f"  [PASS] {test['id']}: {test['name']} - {test['result']}")
-echo                 total_passed += 1
-echo             else:
-echo                 print(f"  [FAIL] {test['id']}: {test['name']}")
-echo                 total_failed += 1
-echo     print("-" * 50)
-echo     print(f"SUMMARY: {total_passed} passed, {total_failed} failed")
-echo     if total_failed == 0:
-echo         print("\nALL PHASE 2 TESTS PASSED")
-echo         return True
-echo     else:
-echo         return False
-echo.
-echo if __name__ == "__main__":
-echo     run_phase2_verification()
-) > verify_phase2.py
+import json
+import os
+
+def run_phase2_verification():
+    """
+    Verifies Phase 2 manual testing results from JSON report.
+    """
+    report_path = os.path.join(os.path.dirname(__file__), 'PHASE2_REPORT.json')
+    
+    if not os.path.exists(report_path):
+        print("❌ ERROR: PHASE2_REPORT.json not found!")
+        return False
+    
+    with open(report_path, 'r') as f:
+        data = json.load(f)
+    
+    print("=" * 60)
+    print("PHASE 2 - MANUAL TESTING VERIFICATION")
+    print("=" * 60)
+    print(f"Report ID: {data['report_id']}")
+    print(f"Timestamp: {data['timestamp']}")
+    print(f"Status: {data['status']}")
+    print("-" * 60)
+    
+    total_passed = 0
+    total_failed = 0
+    categories = data['detailed_results']
+    
+    for category in categories:
+        cat_name = category['category']
+        tests = category['tests']
+        print(f"\n📁 {cat_name}: {len(tests)} tests")
+        
+        for test in tests:
+            if test['status'] == 'PASS':
+                print(f"  ✅ {test['id']}: {test['name']} - {test.get('result', test.get('decision', 'PASS'))}")
+                total_passed += 1
+            else:
+                print(f"  ❌ {test['id']}: {test['name']} - FAILED")
+                total_failed += 1
+    
+    print("-" * 60)
+    print(f"\n📊 FINAL SUMMARY:")
+    print(f"   Total Tests: {total_passed + total_failed}")
+    print(f"   PASSED: {total_passed}")
+    print(f"   FAILED: {total_failed}")
+    
+    print(f"\n🔍 VERIFICATION READ METHODS:")
+    verif = data.get('verification_read_methods', {})
+    print(f"   get_threshold: {verif.get('get_threshold', 'N/A')}")
+    print(f"   executors count: {len(verif.get('get_executors', []))}")
+    print(f"   consensus: {verif.get('consensus', 'N/A')}")
+    
+    if total_failed == 0:
+        print("\n" + "=" * 60)
+        print("🎉 SUCCESS: All Phase 2 tests passed!")
+        print("=" * 60)
+        return True
+    else:
+        print(f"\n⚠️ WARNING: {total_failed} tests failed.")
+        return False
+
 if __name__ == "__main__":
-    run_integration_verification()
+    run_phase2_verification()
