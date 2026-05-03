@@ -1,9 +1,7 @@
 # { "Depends": "py-genlayer:test" }
+
 # ═══════════════════════════════════════════════════════════════
-# GenRoute — AI Security Simulation Layer (v2.0 Enhanced)
-# ───────────────────────────────────────────────────────────────
-# FULL IMPLEMENTATION
-# Includes: Economics, Privacy Hashing, Circular Buffers, Governance
+# GenRoute — AI Security Simulation Layer
 # ═══════════════════════════════════════════════════════════════
 
 from genlayer import *
@@ -12,18 +10,7 @@ import json
 import base64
 
 
-# ═══════════════════════════════════════════════════════════════
-# CONSTANTS
-# ═══════════════════════════════════════════════════════════════
-
-MAX_TRACES = 500       # Limit history size to save gas
-MAX_REPORTS = 200      # Limit report storage
-MIN_FEE = u32(1000000) # Minimum fee in native token units
-
-
-# ═══════════════════════════════════════════════════════════════
-# STORAGE TYPES
-# ═══════════════════════════════════════════════════════════════
+# ─── STORAGE TYPES ─────────────────────────────────────────────
 
 @allow_storage
 @dataclass
@@ -32,18 +19,17 @@ class Executor:
     description: str
     cost_tier: u32
     confidence_boost: u32
-    is_active: bool
 
 
 @allow_storage
 @dataclass
 class RoutingTrace:
-    input_hash: str
+    user_input: str
     executor: str
     confidence: u32
     consensus_used: bool
     source: str
-    timestamp: u64
+    reasoning: str
 
 
 @allow_storage
@@ -55,33 +41,26 @@ class SecurityReport:
     findings_json: str
     attacks_json: str
     decision: str
-    analyzed_at: u64
 
 
 # ═══════════════════════════════════════════════════════════════
 # MODULE-LEVEL PURE FUNCTIONS
-# No class, no self, no storage — safe inside nondet
 # ═══════════════════════════════════════════════════════════════
 
 def _strip(raw: str) -> str:
-    """Removes markdown code blocks and whitespace."""
     c = raw.strip()
     if c.startswith("```"):
         c = "\n".join(l for l in c.splitlines()
                       if not l.strip().startswith("```")).strip()
     return c
 
-
 def _parse_dict(raw: str) -> dict:
-    """Safely parses JSON string to dict."""
     try:
         return json.loads(_strip(raw))
     except Exception:
         return {}
 
-
 def _parse_list(raw: str) -> list:
-    """Safely parses JSON string to list."""
     try:
         r = json.loads(_strip(raw))
         return r if isinstance(r, list) else []
@@ -89,11 +68,10 @@ def _parse_list(raw: str) -> list:
         return []
 
 
-# ── Layer 1: Contract Parser Leader/Validator ──────────────────
+# ── Layer 1 ────────────────────────────────────────────────────
 
 def _parse_leader(prompt: str) -> str:
     return _strip(gl.nondet.exec_prompt(prompt))
-
 
 def _parse_validator(res: str) -> bool:
     if not isinstance(res, str):
@@ -108,7 +86,7 @@ def _parse_validator(res: str) -> bool:
         return False
 
 
-# ── Layer 2: Attack Generator Leader/Validator ─────────────────
+# ── Layer 2 ────────────────────────────────────────────────────
 
 def _attack_leader(prompt: str) -> str:
     c = _strip(gl.nondet.exec_prompt(prompt))
@@ -118,21 +96,18 @@ def _attack_leader(prompt: str) -> str:
     except Exception:
         return "[]"
 
-
 def _attack_validator(res: str) -> bool:
     if not isinstance(res, str):
         return False
     try:
         d = json.loads(res)
         return (isinstance(d, list)
-                and all(isinstance(a, dict)
-                        and "name" in a and "type" in a
-                        for a in d))
+                and all(isinstance(a, dict) and "name" in a and "type" in a for a in d))
     except Exception:
         return False
 
 
-# ── Layer 3: Simulator Leader/Validator ────────────────────────
+# ── Layer 3 ────────────────────────────────────────────────────
 
 def _sim_leader(prompt: str) -> str:
     c = _strip(gl.nondet.exec_prompt(prompt))
@@ -142,25 +117,21 @@ def _sim_leader(prompt: str) -> str:
     except Exception:
         return "[]"
 
-
 def _sim_validator(res: str) -> bool:
     if not isinstance(res, str):
         return False
     try:
         d = json.loads(res)
         return (isinstance(d, list)
-                and all(isinstance(s, dict)
-                        and "attack_name" in s and "succeeded" in s
-                        for s in d))
+                and all(isinstance(s, dict) and "attack_name" in s and "succeeded" in s for s in d))
     except Exception:
         return False
 
 
-# ── Layer 4: Classifier Leader/Validator ───────────────────────
+# ── Layer 4 ────────────────────────────────────────────────────
 
 def _clf_leader(prompt: str) -> str:
     return _strip(gl.nondet.exec_prompt(prompt))
-
 
 def _clf_validator(res: str) -> bool:
     if not isinstance(res, str):
@@ -174,14 +145,12 @@ def _clf_validator(res: str) -> bool:
         return False
 
 
-# ── Layer 5: Routing Leader/Validator ──────────────────────────
+# ── Layer 5 ────────────────────────────────────────────────────
 
 def _route_leader(prompt: str) -> str:
     return _strip(gl.nondet.exec_prompt(prompt))
 
-
 def _route_validator(res: str, executor_names: list) -> bool:
-    """Validates routing output against active executors."""
     if not isinstance(res, str):
         return False
     try:
@@ -194,108 +163,109 @@ def _route_validator(res: str, executor_names: list) -> bool:
         return False
 
 
-# ── Helpers ────────────────────────────────────────────────────
+# ─── helpers ───────────────────────────────────────────────────
+
+# ─── Rule-based pre-filters (run BEFORE LLM, no nondet) ────────
+
+INJECTION_PATTERNS = [
+    "ignore previous", "ignore all", "ignore the",
+    "override", "bypass",
+    "forget previous", "forget all",
+    "instead do", "instead route",
+    "disregard", "do not follow",
+    "new instruction", "new directive",
+    "you are now", "act as",
+    "confidence 100", "confidence: 100",
+    "route to ", "executor =", "executor:",
+    "\"executor\"", "'executor'",
+    "// transfer", "// send", "// route",
+]
+
+UNCERTAINTY_PATTERNS = [
+    "or don't", "or do not",
+    "i'm not sure", "im not sure", "not sure",
+    "i don't know", "i do not know", "idk",
+    "maybe", "perhaps", "possibly",
+    "whatever", "anything", "doesn't matter",
+    "just do", "up to you", "your choice",
+    "not certain", "uncertain",
+]
+
+def _has_injection(text: str) -> bool:
+    t = text.lower()
+    return any(p in t for p in INJECTION_PATTERNS)
+
+def _has_uncertainty(text: str) -> bool:
+    t = text.lower()
+    return any(p in t for p in UNCERTAINTY_PATTERNS)
+
 
 def _enc(text: str) -> str:
-    """Base64 encoder for privacy/safety."""
-    return base64.b64encode(
-        text.encode("utf-8", errors="replace")
-    ).decode("ascii")
-
+    return base64.b64encode(text.encode("utf-8", errors="replace")).decode("ascii")
 
 def _hash(text: str, prefix: str) -> str:
-    """Simple deterministic hash for indexing."""
     h = 0
     for ch in text:
         h = (h * 31 + ord(ch)) & 0xFFFFFFFF
     return f"{prefix}_{h}"
 
 
+# ─── STORAGE LIMITS ────────────────────────────────────────────
+MAX_TRACES      = 200
+MAX_REPORTS     = 100
+MAX_MEMORY_KEYS = 500
+MAX_FAILURE_KEYS= 500
+
+
 # ═══════════════════════════════════════════════════════════════
-# CONTRACT DEFINITION
+# CONTRACT
 # ═══════════════════════════════════════════════════════════════
 
 class GenRoute(gl.Contract):
-    # State Variables
+
     executors:         DynArray[Executor]
     routing_memory:    TreeMap[str, str]
-    failure_counts:    TreeMap[str, u32]
+    failure_counts:    TreeMap[str, str]
     traces:            DynArray[RoutingTrace]
     reports:           DynArray[SecurityReport]
     analyzed_hashes:   TreeMap[str, str]
     owner:             Address
-
-    # Economic & Config State
-    analysis_fee:      u32
-    treasury_balance:  u32
     routing_threshold: u32
-    trace_cursor:      u32
-    report_cursor:     u32
 
     def __init__(self):
-        self.owner = gl.message.sender_address
+        self.owner             = gl.message.sender_address
         self.routing_threshold = u32(70)
-        self.analysis_fee = MIN_FEE
-        self.treasury_balance = u32(0)
-        self.trace_cursor = u32(0)
-        self.report_cursor = u32(0)
 
-        # Initialize storage containers
-        self.executors = DynArray()
-        self.routing_memory = TreeMap()
-        self.failure_counts = TreeMap()
-        self.traces = DynArray()
-        self.reports = DynArray()
-        self.analyzed_hashes = TreeMap()
-
-        # Initialize Default Executors
-        self._add_executor_internal(
+        self.executors.append(Executor(
             "financial_executor",
             "Handles payments, DeFi, token transfers, and financial risk",
-            u32(2), u32(10)
-        )
-        self._add_executor_internal(
+            u32(2), u32(10)))
+        self.executors.append(Executor(
             "audit_executor",
             "Smart contract security analysis and vulnerability scanning",
-            u32(3), u32(15)
-        )
-        self._add_executor_internal(
+            u32(3), u32(15)))
+        self.executors.append(Executor(
             "social_executor",
             "DAO governance, proposals, voting, and reputation",
-            u32(1), u32(5)
-        )
-        self._add_executor_internal(
+            u32(1), u32(5)))
+        self.executors.append(Executor(
             "consensus_executor",
             "Safe fallback for ambiguous or high-risk intents",
-            u32(3), u32(20)
-        )
+            u32(3), u32(20)))
 
-    # ── Internal Helpers ───────────────────────────────────────
 
-    def _add_executor_internal(self, name: str, desc: str, cost: u32, boost: u32):
-        self.executors.append(
-            gl.storage.inmem_allocate(Executor, name, desc, cost, boost, True)
-        )
+    def _names(self) -> list:
+        return [e.name for e in self.executors]
 
-    def _get_active_names(self) -> list:
-        return [e.name for e in self.executors if e.is_active]
-
-    def _get_boosts(self) -> dict:
-        return {e.name: int(e.confidence_boost) for e in self.executors if e.is_active}
+    def _boosts(self) -> dict:
+        return {e.name: int(e.confidence_boost) for e in self.executors}
 
     def _decision(self, score: int) -> str:
-        if score >= 80:
-            return "block"
-        elif score >= 50:
-            return "warn"
-        elif score >= 20:
-            return "flag"
-        else:
-            return "allow"
+        if score >= 80:   return "block"
+        elif score >= 50: return "warn"
+        elif score >= 20: return "flag"
+        else:             return "allow"
 
-    # ════════════════════════════════════════════════════════════
-    # LAYER 1 — CONTRACT PARSER
-    # ════════════════════════════════════════════════════════════
 
     def _parse_contract(self, source: str) -> dict:
         encoded = _enc(source[:3000])
@@ -317,10 +287,6 @@ class GenRoute(gl.Contract):
         )
         return _parse_dict(raw if isinstance(raw, str) else "{}")
 
-    # ════════════════════════════════════════════════════════════
-    # LAYER 2 — ATTACK GENERATOR
-    # ════════════════════════════════════════════════════════════
-
     def _generate_attacks(self, contract_map: dict) -> list:
         encoded = _enc(json.dumps(contract_map))
         prompt = (
@@ -339,10 +305,6 @@ class GenRoute(gl.Contract):
         )
         return _parse_list(raw if isinstance(raw, str) else "[]")
 
-    # ════════════════════════════════════════════════════════════
-    # LAYER 3 — EXECUTION SIMULATOR
-    # ════════════════════════════════════════════════════════════
-
     def _simulate_attacks(self, contract_map: dict, attacks: list) -> list:
         encoded = _enc(json.dumps({"contract": contract_map, "attacks": attacks}))
         prompt = (
@@ -359,10 +321,6 @@ class GenRoute(gl.Contract):
             lambda res: _sim_validator(res)
         )
         return _parse_list(raw if isinstance(raw, str) else "[]")
-
-    # ════════════════════════════════════════════════════════════
-    # LAYER 4 — ATTACK CLASSIFIER
-    # ════════════════════════════════════════════════════════════
 
     def _classify(self, simulation: list, contract_map: dict) -> dict:
         encoded = _enc(json.dumps({"simulation": simulation, "contract": contract_map}))
@@ -382,14 +340,10 @@ class GenRoute(gl.Contract):
         )
         return _parse_dict(raw if isinstance(raw, str) else "{}")
 
-    # ════════════════════════════════════════════════════════════
-    # LAYER 5 — ROUTING + INJECTION DEFENCE
-    # ════════════════════════════════════════════════════════════
-
     def _llm_route(self, raw_input: str, names: list) -> str:
-        executor_list = ", ".join(names)
+        executor_list   = ", ".join(names)
         safe_names_json = json.dumps(names)
-        encoded = _enc(raw_input)
+        encoded         = _enc(raw_input)
         prompt = (
             "You are a security-aware routing classifier for a blockchain smart contract.\n"
             f"Available executors: {executor_list}\n\n"
@@ -410,55 +364,73 @@ class GenRoute(gl.Contract):
         )
         return raw if isinstance(raw, str) else "{}"
 
-    # ════════════════════════════════════════════════════════════
-    # PUBLIC WRITE — route
-    # ════════════════════════════════════════════════════════════
 
     @gl.public.write
-    @gl.payable
     def route(self, user_input: str) -> str:
-        """
-        Classify user intent → executor.
-        Requires fee payment. Stores hashed input for privacy.
-        """
-        # 1. Fee Check
-        assert gl.message.value >= self.analysis_fee, f"Insufficient fee. Required: {self.analysis_fee}"
-        assert len(user_input) > 0, "user_input cannot be empty"
+        assert len(user_input) > 0,     "user_input cannot be empty"
         assert len(user_input) <= 2000, "user_input too long (max 2000 chars)"
 
         raw_input = user_input[:300].strip()
-        key = _hash(raw_input.lower(), "intent")
-        input_hash = _hash(raw_input, "priv")  # Hash for storage privacy
-
-        # Snapshot storage BEFORE any nondet
-        names = self._get_active_names()
-        boosts = self._get_boosts()
+        key       = _hash(raw_input.lower(), "intent")
+        names     = self._names()
+        boosts    = self._boosts()
         threshold = int(self.routing_threshold)
+        cached    = self.routing_memory.get(key)
 
-        cached = self.routing_memory.get(key)
         if cached is not None:
-            self.traces.append(
-                gl.storage.inmem_allocate(
-                    RoutingTrace, input_hash, cached, u32(95), False, "memory", u64(gl.chain.timestamp)
-                )
-            )
-            return json.dumps({
-                "executor": cached,
-                "confidence": 95,
-                "source": "memory",
-                "consensus_used": False
-            })
+            if len(self.traces) >= MAX_TRACES:
+                del self.traces[0]
+            self.traces.append(RoutingTrace(
+                raw_input, cached, u32(95), False, "memory", "Reused previous route"))
+            return json.dumps({"executor": cached, "confidence": 95,
+                               "source": "memory", "consensus_used": False})
 
-        raw = self._llm_route(raw_input, names)
+        # ── Step 1: rule-based injection detection (before LLM) ──
+        if _has_injection(raw_input):
+            if len(self.routing_memory) >= MAX_MEMORY_KEYS:
+                first_key = next(iter(self.routing_memory))
+                del self.routing_memory[first_key]
+            self.routing_memory[key] = "consensus_executor"
+            if len(self.traces) >= MAX_TRACES:
+                del self.traces[0]
+            self.traces.append(RoutingTrace(
+                raw_input, "consensus_executor", u32(5), True,
+                "pre_filter", "injection_detected"))
+            return json.dumps({"executor": "consensus_executor", "confidence": 5,
+                               "source": "pre_filter", "consensus_used": True})
+
+        # ── Step 2: rule-based uncertainty detection (before LLM) ─
+        if _has_uncertainty(raw_input):
+            if len(self.routing_memory) >= MAX_MEMORY_KEYS:
+                first_key = next(iter(self.routing_memory))
+                del self.routing_memory[first_key]
+            self.routing_memory[key] = "consensus_executor"
+            if len(self.traces) >= MAX_TRACES:
+                del self.traces[0]
+            self.traces.append(RoutingTrace(
+                raw_input, "consensus_executor", u32(20), True,
+                "pre_filter", "uncertain_input"))
+            return json.dumps({"executor": "consensus_executor", "confidence": 20,
+                               "source": "pre_filter", "consensus_used": True})
+
+        if cached is not None:
+            if len(self.traces) >= MAX_TRACES:
+                del self.traces[0]
+            self.traces.append(RoutingTrace(
+                raw_input, cached, u32(95), False, "memory", "Reused previous route"))
+            return json.dumps({"executor": cached, "confidence": 95,
+                               "source": "memory", "consensus_used": False})
+
+        raw  = self._llm_route(raw_input, names)
         data = _parse_dict(raw)
-        executor = str(data.get("executor", "consensus_executor"))
+
+        executor   = str(data.get("executor",   "consensus_executor"))
         confidence = int(data.get("confidence", 40))
-        injection = bool(data.get("injection", False))
-        reason = str(data.get("reason", ""))
+        injection  = bool(data.get("injection", False))
+        reason     = str(data.get("reason",     ""))
 
         if executor not in names:
             executor, confidence, reason = "consensus_executor", 30, "invalid_executor"
-
         if injection:
             executor, confidence, reason = "consensus_executor", 10, "injection_detected"
 
@@ -472,170 +444,111 @@ class GenRoute(gl.Contract):
             executor, consensus_used = "consensus_executor", True
             confidence = max(confidence, 50)
 
+        if len(self.routing_memory) >= MAX_MEMORY_KEYS:
+            first_key = next(iter(self.routing_memory))
+            del self.routing_memory[first_key]
         self.routing_memory[key] = executor
 
-        # Add Trace
-        self.traces.append(
-            gl.storage.inmem_allocate(
-                RoutingTrace, input_hash, executor, u32(confidence),
-                consensus_used, "fresh", u64(gl.chain.timestamp)
-            )
-        )
+        if len(self.traces) >= MAX_TRACES:
+            del self.traces[0]
+        self.traces.append(RoutingTrace(
+            raw_input, executor, u32(confidence), consensus_used, "fresh", reason))
 
-        # Update Treasury
-        self.treasury_balance = u32(int(self.treasury_balance) + int(gl.message.value))
+        return json.dumps({"executor": executor, "confidence": confidence,
+                           "source": "fresh", "consensus_used": consensus_used})
 
-        return json.dumps({
-            "executor": executor,
-            "confidence": confidence,
-            "source": "fresh",
-            "consensus_used": consensus_used
-        })
-
-    # ════════════════════════════════════════════════════════════
-    # PUBLIC WRITE — analyze_contract
-    # ════════════════════════════════════════════════════════════
 
     @gl.public.write
-    @gl.payable
     def analyze_contract(self, source: str, label: str) -> str:
-        """
-        Full security pipeline: parse → attacks → simulate → classify → decide.
-        Requires fee payment.
-        """
-        assert gl.message.value >= self.analysis_fee, "Insufficient fee for analysis"
-        assert len(source) > 10, "source too short (min 10 chars)"
+        assert len(source) > 10,    "source too short (min 10 chars)"
         assert len(source) <= 8000, "source too long (max 8000 chars)"
-        assert len(label) > 0, "label cannot be empty"
+        assert len(label)  > 0,     "label cannot be empty"
 
-        src_hash = _hash(source + label, "src")
+        src_hash   = _hash(source + label, "src")
         cached_idx = self.analyzed_hashes.get(src_hash)
 
         if cached_idx is not None:
             r = self.reports[int(cached_idx)]
             return json.dumps({
-                "contract_name": r.contract_name,
-                "risk_score": int(r.risk_score),
-                "decision": r.decision,
-                "findings": json.loads(r.findings_json),
+                "contract_name":     r.contract_name,
+                "risk_score":        int(r.risk_score),
+                "decision":          r.decision,
+                "findings":          json.loads(r.findings_json),
                 "attacks_simulated": json.loads(r.attacks_json),
-                "summary": "Cached report",
-                "source": "cache"
+                "summary":           "Cached report",
+                "source":            "cache"
             })
 
-        # Layer 1
         cmap = self._parse_contract(source)
         if not cmap:
-            cmap = {
-                "contract_name": label,
-                "language": "unknown",
-                "functions": [],
-                "storage_vars": [],
-                "access_patterns": [],
-                "overall_risk": "medium"
-            }
+            cmap = {"contract_name": label, "language": "unknown",
+                    "functions": [], "storage_vars": [],
+                    "access_patterns": [], "overall_risk": "medium"}
 
-        # Layer 2
-        attacks = self._generate_attacks(cmap)
-
-        # Layer 3
+        attacks    = self._generate_attacks(cmap)
         simulation = self._simulate_attacks(cmap, attacks)
-
-        # Layer 4
-        clf = self._classify(simulation, cmap)
-        findings = clf.get("findings", [])
+        clf        = self._classify(simulation, cmap)
+        findings   = clf.get("findings", [])
         risk_score = int(max(0, min(100, clf.get("overall_risk_score", 50))))
-        summary = str(clf.get("summary", ""))
+        summary    = str(clf.get("summary", ""))
+        decision   = self._decision(risk_score)
 
-        # Layer 5 decision
-        decision = self._decision(risk_score)
-
+        if len(self.reports) >= MAX_REPORTS:
+            del self.reports[0]
         idx = len(self.reports)
-        self.reports.append(
-            gl.storage.inmem_allocate(
-                SecurityReport,
-                src_hash,
-                str(cmap.get("contract_name", label)),
-                u32(risk_score),
-                json.dumps(findings),
-                json.dumps(attacks),
-                decision,
-                u64(gl.chain.timestamp)
-            )
-        )
+        self.reports.append(SecurityReport(
+            src_hash,
+            str(cmap.get("contract_name", label)),
+            u32(risk_score),
+            json.dumps(findings),
+            json.dumps(attacks),
+            decision
+        ))
         self.analyzed_hashes[src_hash] = str(idx)
 
-        # Update Treasury
-        self.treasury_balance = u32(int(self.treasury_balance) + int(gl.message.value))
-
         return json.dumps({
-            "contract_name": cmap.get("contract_name", label),
-            "risk_score": risk_score,
-            "decision": decision,
-            "findings": findings,
+            "contract_name":     cmap.get("contract_name", label),
+            "risk_score":        risk_score,
+            "decision":          decision,
+            "findings":          findings,
             "attacks_simulated": attacks,
-            "simulation": simulation,
-            "summary": summary
+            "simulation":        simulation,
+            "summary":           summary
         })
 
-    # ════════════════════════════════════════════════════════════
-    # ADMIN & ECONOMIC FUNCTIONS
-    # ════════════════════════════════════════════════════════════
-
-    @gl.public.write
-    def withdraw_treasury(self, amount: u32, to: Address):
-        """Owner can withdraw accumulated fees."""
-        assert gl.message.sender_address == self.owner, "Only owner"
-        assert amount <= self.treasury_balance, "Insufficient treasury balance"
-
-        self.treasury_balance = u32(int(self.treasury_balance) - int(amount))
-        # Note: Actual transfer depends on GenLayer runtime support
-        # gl.token.transfer(to, amount)
-        return json.dumps({"status": "success", "amount": int(amount), "to": str(to)})
-
-    @gl.public.write
-    def set_fee(self, new_fee: u32):
-        assert gl.message.sender_address == self.owner, "Only owner"
-        assert new_fee >= MIN_FEE, "Fee too low"
-        self.analysis_fee = u32(new_fee)
-
-    @gl.public.write
-    def remove_executor(self, name: str):
-        """Soft remove an executor."""
-        assert gl.message.sender_address == self.owner, "Only owner"
-        for i in range(len(self.executors)):
-            if self.executors[i].name == name:
-                self.executors[i].is_active = False
-                return
-        assert False, "Executor not found"
 
     @gl.public.write
     def record_outcome(self, key: str, executor: str, success: bool):
-        """Feedback loop for routing accuracy. Restricted to contract owner to prevent memory poisoning."""
-        assert gl.message.sender_address == self.owner, "Only owner can record outcomes"
-        assert len(key) > 0, "key cannot be empty"
-        assert executor in self._get_active_names(), "Unknown or inactive executor"
+        assert gl.message.sender_address == self.owner, "Only owner"
+        assert len(key) > 0,             "key cannot be empty"
+        assert executor in self._names(), "Unknown executor"
 
         if bool(success):
+            if len(self.routing_memory) >= MAX_MEMORY_KEYS:
+                first_key = next(iter(self.routing_memory))
+                del self.routing_memory[first_key]
             self.routing_memory[key] = executor
         else:
             cur = self.failure_counts.get(key)
-            val = int(cur) + 1 if cur else 1
-            self.failure_counts[key] = u32(val)
+            if cur is None and len(self.failure_counts) >= MAX_FAILURE_KEYS:
+                first_key = next(iter(self.failure_counts))
+                del self.failure_counts[first_key]
+            self.failure_counts[key] = str(int(cur) + 1) if cur else "1"
             if self.routing_memory.get(key) is not None:
                 del self.routing_memory[key]
 
     @gl.public.write
-    def register_executor(self, name: str, description: str, cost_tier: u32, confidence_boost: u32):
+    def register_executor(self, name: str, description: str,
+                          cost_tier: u32, confidence_boost: u32):
         assert gl.message.sender_address == self.owner, "Only owner"
-        assert len(name) > 0 and len(description) >= 10, "Invalid params"
+        assert len(name) > 0,                               "Name cannot be empty"
+        assert len(description) >= 10,                      "Description too short (min 10 chars)"
         assert cost_tier >= u32(1) and cost_tier <= u32(3), "cost_tier must be 1-3"
-        assert len(self.executors) < 20, "Executor limit reached"
-
+        assert confidence_boost <= u32(100),                "confidence_boost cannot exceed 100"
+        assert len(self.executors) < 20,                    "Executor limit reached (max 20)"
         for e in self.executors:
-            assert e.name != name, "Executor already exists"
-
-        self._add_executor_internal(name, description, cost_tier, confidence_boost)
+            assert e.name != name, "Executor already registered"
+        self.executors.append(Executor(name, description, cost_tier, confidence_boost))
 
     @gl.public.write
     def set_threshold(self, threshold: u32):
@@ -643,13 +556,6 @@ class GenRoute(gl.Contract):
         assert threshold >= u32(1) and threshold <= u32(99), "Threshold must be 1-99"
         self.routing_threshold = u32(threshold)
 
-    # ════════════════════════════════════════════════════════════
-    # PUBLIC VIEWS
-    # ════════════════════════════════════════════════════════════
-
-    @gl.public.view
-    def get_treasury_balance(self) -> u32:
-        return self.treasury_balance
 
     @gl.public.view
     def get_report(self, index: u32) -> str:
@@ -657,47 +563,43 @@ class GenRoute(gl.Contract):
         assert idx < len(self.reports), "Report not found"
         r = self.reports[idx]
         return json.dumps({
-            "index": idx,
+            "index":         idx,
             "contract_name": r.contract_name,
-            "risk_score": int(r.risk_score),
-            "decision": r.decision,
-            "findings": json.loads(r.findings_json),
-            "attacks": json.loads(r.attacks_json),
-            "timestamp": int(r.analyzed_at)
+            "risk_score":    int(r.risk_score),
+            "decision":      r.decision,
+            "findings":      json.loads(r.findings_json),
+            "attacks":       json.loads(r.attacks_json)
         })
 
     @gl.public.view
-    def get_traces(self, limit: u32 = u32(50)) -> str:
-        """Returns latest traces (reversed order)."""
-        lim = int(limit)
-        start = max(0, len(self.traces) - lim)
-        result = []
-        for i in range(start, len(self.traces)):
-            t = self.traces[i]
-            result.append({
-                "input_hash": t.input_hash,
-                "executor": t.executor,
-                "confidence": int(t.confidence),
-                "consensus_used": t.consensus_used,
-                "source": t.source,
-                "timestamp": int(t.timestamp)
-            })
-        return json.dumps(result)
+    def get_all_reports(self) -> str:
+        return json.dumps([{
+            "index":         i,
+            "contract_name": r.contract_name,
+            "risk_score":    int(r.risk_score),
+            "decision":      r.decision
+        } for i, r in enumerate(self.reports)])
+
+    @gl.public.view
+    def get_traces(self) -> str:
+        return json.dumps([{
+            "input":          t.user_input,
+            "executor":       t.executor,
+            "confidence":     int(t.confidence),
+            "consensus_used": t.consensus_used,
+            "source":         t.source,
+            "reason":         t.reasoning
+        } for t in self.traces])
 
     @gl.public.view
     def get_executors(self) -> str:
         return json.dumps([{
-            "name": e.name,
-            "description": e.description,
-            "cost_tier": int(e.cost_tier),
-            "confidence_boost": int(e.confidence_boost),
-            "active": e.is_active
+            "name":             e.name,
+            "description":      e.description,
+            "cost_tier":        int(e.cost_tier),
+            "confidence_boost": int(e.confidence_boost)
         } for e in self.executors])
 
     @gl.public.view
-    def get_fee(self) -> u32:
-        return self.analysis_fee
-
-    @gl.public.view
     def get_threshold(self) -> u32:
-        return self.routing_threshold
+        return u32(self.routing_threshold)
