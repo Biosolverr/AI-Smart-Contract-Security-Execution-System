@@ -21,28 +21,6 @@ class Executor:
     confidence_boost: u32
 
 
-@allow_storage
-@dataclass
-class RoutingTrace:
-    user_input: str
-    executor: str
-    confidence: u32
-    consensus_used: bool
-    source: str
-    reasoning: str
-
-
-@allow_storage
-@dataclass
-class SecurityReport:
-    contract_hash: str
-    contract_name: str
-    risk_score: u32
-    findings_json: str
-    attacks_json: str
-    decision: str
-
-
 # ═══════════════════════════════════════════════════════════════
 # MODULE-LEVEL PURE FUNCTIONS
 # ═══════════════════════════════════════════════════════════════
@@ -226,15 +204,19 @@ class GenRoute(gl.Contract):
     executors:         DynArray[Executor]
     routing_memory:    TreeMap[str, str]
     failure_counts:    TreeMap[str, str]
-    traces:            DynArray[RoutingTrace]
-    reports:           DynArray[SecurityReport]
+    traces:            TreeMap[str, str]
+    reports:           TreeMap[str, str]
     analyzed_hashes:   TreeMap[str, str]
     owner:             Address
     routing_threshold: u32
+    trace_count:       u32
+    report_count:      u32
 
     def __init__(self):
         self.owner             = gl.message.sender_address
         self.routing_threshold = u32(70)
+        self.trace_count       = u32(0)
+        self.report_count      = u32(0)
 
         self.executors.append(Executor(
             "financial_executor",
@@ -367,6 +349,10 @@ class GenRoute(gl.Contract):
 
     @gl.public.write
     def route(self, user_input: str) -> str:
+        """
+        Classify intent via LLM. Returns routing decision.
+        Does NOT write to storage — call commit_route() after to persist.
+        """
         assert len(user_input) > 0,     "user_input cannot be empty"
         assert len(user_input) <= 2000, "user_input too long (max 2000 chars)"
 
@@ -378,48 +364,21 @@ class GenRoute(gl.Contract):
         cached    = self.routing_memory.get(key)
 
         if cached is not None:
-            if len(self.traces) >= MAX_TRACES:
-                del self.traces[0]
-            self.traces.append(RoutingTrace(
-                raw_input, cached, u32(95), False, "memory", "Reused previous route"))
             return json.dumps({"executor": cached, "confidence": 95,
-                               "source": "memory", "consensus_used": False})
+                               "source": "memory", "consensus_used": False,
+                               "key": key})
 
         # ── Step 1: rule-based injection detection (before LLM) ──
         if _has_injection(raw_input):
-            if len(self.routing_memory) >= MAX_MEMORY_KEYS:
-                first_key = next(iter(self.routing_memory))
-                del self.routing_memory[first_key]
-            self.routing_memory[key] = "consensus_executor"
-            if len(self.traces) >= MAX_TRACES:
-                del self.traces[0]
-            self.traces.append(RoutingTrace(
-                raw_input, "consensus_executor", u32(5), True,
-                "pre_filter", "injection_detected"))
             return json.dumps({"executor": "consensus_executor", "confidence": 5,
-                               "source": "pre_filter", "consensus_used": True})
+                               "source": "pre_filter", "consensus_used": True,
+                               "key": key, "reason": "injection_detected"})
 
         # ── Step 2: rule-based uncertainty detection (before LLM) ─
         if _has_uncertainty(raw_input):
-            if len(self.routing_memory) >= MAX_MEMORY_KEYS:
-                first_key = next(iter(self.routing_memory))
-                del self.routing_memory[first_key]
-            self.routing_memory[key] = "consensus_executor"
-            if len(self.traces) >= MAX_TRACES:
-                del self.traces[0]
-            self.traces.append(RoutingTrace(
-                raw_input, "consensus_executor", u32(20), True,
-                "pre_filter", "uncertain_input"))
             return json.dumps({"executor": "consensus_executor", "confidence": 20,
-                               "source": "pre_filter", "consensus_used": True})
-
-        if cached is not None:
-            if len(self.traces) >= MAX_TRACES:
-                del self.traces[0]
-            self.traces.append(RoutingTrace(
-                raw_input, cached, u32(95), False, "memory", "Reused previous route"))
-            return json.dumps({"executor": cached, "confidence": 95,
-                               "source": "memory", "consensus_used": False})
+                               "source": "pre_filter", "consensus_used": True,
+                               "key": key, "reason": "uncertain_input"})
 
         raw  = self._llm_route(raw_input, names)
         data = _parse_dict(raw)
@@ -444,18 +403,44 @@ class GenRoute(gl.Contract):
             executor, consensus_used = "consensus_executor", True
             confidence = max(confidence, 50)
 
+        return json.dumps({"executor": executor, "confidence": confidence,
+                           "source": "fresh", "consensus_used": consensus_used,
+                           "key": key, "reason": reason})
+
+    @gl.public.write
+    def commit_route(self, user_input: str, executor: str,
+                     confidence: u32, source: str, reason: str):
+        """
+        Persist routing result to storage (traces + routing_memory).
+        Call this after route() with the values from its response.
+        Only owner can commit to prevent memory poisoning.
+        """
+        assert gl.message.sender_address == self.owner, "Only owner"
+        assert executor in self._names(), "Unknown executor"
+
+        raw_input = user_input[:300].strip()
+        key       = _hash(raw_input.lower(), "intent")
+
         if len(self.routing_memory) >= MAX_MEMORY_KEYS:
             first_key = next(iter(self.routing_memory))
             del self.routing_memory[first_key]
         self.routing_memory[key] = executor
 
-        if len(self.traces) >= MAX_TRACES:
-            del self.traces[0]
-        self.traces.append(RoutingTrace(
-            raw_input, executor, u32(confidence), consensus_used, "fresh", reason))
+        self._write_trace({
+            "input":          raw_input,
+            "executor":       executor,
+            "confidence":     int(confidence),
+            "consensus_used": confidence < int(self.routing_threshold),
+            "source":         source,
+            "reason":         reason
+        })
 
-        return json.dumps({"executor": executor, "confidence": confidence,
-                           "source": "fresh", "consensus_used": consensus_used})
+    def _write_trace(self, data: dict):
+        idx = int(self.trace_count)
+        if idx >= MAX_TRACES:
+            del self.traces[str(idx - MAX_TRACES)]
+        self.traces[str(idx)] = json.dumps(data)
+        self.trace_count = u32(idx + 1)
 
 
     @gl.public.write
@@ -468,13 +453,13 @@ class GenRoute(gl.Contract):
         cached_idx = self.analyzed_hashes.get(src_hash)
 
         if cached_idx is not None:
-            r = self.reports[int(cached_idx)]
+            r = json.loads(self.reports[cached_idx])
             return json.dumps({
-                "contract_name":     r.contract_name,
-                "risk_score":        int(r.risk_score),
-                "decision":          r.decision,
-                "findings":          json.loads(r.findings_json),
-                "attacks_simulated": json.loads(r.attacks_json),
+                "contract_name":     r.get("contract_name", ""),
+                "risk_score":        r.get("risk_score", 0),
+                "decision":          r.get("decision", ""),
+                "findings":          json.loads(r.get("findings_json", "[]")),
+                "attacks_simulated": json.loads(r.get("attacks_json", "[]")),
                 "summary":           "Cached report",
                 "source":            "cache"
             })
@@ -493,17 +478,19 @@ class GenRoute(gl.Contract):
         summary    = str(clf.get("summary", ""))
         decision   = self._decision(risk_score)
 
-        if len(self.reports) >= MAX_REPORTS:
-            del self.reports[0]
-        idx = len(self.reports)
-        self.reports.append(SecurityReport(
-            src_hash,
-            str(cmap.get("contract_name", label)),
-            u32(risk_score),
-            json.dumps(findings),
-            json.dumps(attacks),
-            decision
-        ))
+        if int(self.report_count) >= MAX_REPORTS:
+            oldest = str(int(self.report_count) - MAX_REPORTS)
+            del self.reports[oldest]
+        idx = int(self.report_count)
+        self.reports[str(idx)] = json.dumps({
+            "contract_hash": src_hash,
+            "contract_name": str(cmap.get("contract_name", label)),
+            "risk_score":    risk_score,
+            "findings_json": json.dumps(findings),
+            "attacks_json":  json.dumps(attacks),
+            "decision":      decision
+        })
+        self.report_count = u32(idx + 1)
         self.analyzed_hashes[src_hash] = str(idx)
 
         return json.dumps({
@@ -516,6 +503,43 @@ class GenRoute(gl.Contract):
             "summary":           summary
         })
 
+
+    @gl.public.write
+    def commit_analyze(self, source: str, label: str,
+                       contract_name: str, risk_score: u32,
+                       decision: str, findings_json: str, attacks_json: str):
+        """
+        Persist analyze_contract result to storage.
+        Call after analyze_contract() with values from its Output.
+        Only owner can commit.
+        findings_json and attacks_json — скопируй строки из Output как есть.
+        """
+        assert gl.message.sender_address == self.owner, "Only owner"
+        assert len(source) > 10,      "source too short"
+        assert len(label)  > 0,       "label cannot be empty"
+        assert decision in ("allow", "flag", "warn", "block"), "invalid decision"
+
+        src_hash   = _hash(source + label, "src")
+        cached_idx = self.analyzed_hashes.get(src_hash)
+        if cached_idx is not None:
+            return
+
+        if int(self.report_count) >= MAX_REPORTS:
+            oldest = str(int(self.report_count) - MAX_REPORTS)
+            if self.reports.get(oldest) is not None:
+                del self.reports[oldest]
+
+        idx = int(self.report_count)
+        self.reports[str(idx)] = json.dumps({
+            "contract_hash": src_hash,
+            "contract_name": contract_name,
+            "risk_score":    int(risk_score),
+            "findings_json": findings_json,
+            "attacks_json":  attacks_json,
+            "decision":      decision
+        })
+        self.analyzed_hashes[src_hash] = str(idx)
+        self.report_count = u32(idx + 1)
 
     @gl.public.write
     def record_outcome(self, key: str, executor: str, success: bool):
@@ -560,36 +584,44 @@ class GenRoute(gl.Contract):
     @gl.public.view
     def get_report(self, index: u32) -> str:
         idx = int(index)
-        assert idx < len(self.reports), "Report not found"
-        r = self.reports[idx]
+        assert idx < int(self.report_count), "Report not found"
+        d = json.loads(self.reports[str(idx)])
         return json.dumps({
             "index":         idx,
-            "contract_name": r.contract_name,
-            "risk_score":    int(r.risk_score),
-            "decision":      r.decision,
-            "findings":      json.loads(r.findings_json),
-            "attacks":       json.loads(r.attacks_json)
+            "contract_name": d.get("contract_name", ""),
+            "risk_score":    d.get("risk_score", 0),
+            "decision":      d.get("decision", ""),
+            "findings":      json.loads(d.get("findings_json", "[]")),
+            "attacks":       json.loads(d.get("attacks_json", "[]"))
         })
 
     @gl.public.view
     def get_all_reports(self) -> str:
-        return json.dumps([{
-            "index":         i,
-            "contract_name": r.contract_name,
-            "risk_score":    int(r.risk_score),
-            "decision":      r.decision
-        } for i, r in enumerate(self.reports)])
+        result = []
+        total = int(self.report_count)
+        start = max(0, total - MAX_REPORTS)
+        for i in range(start, total):
+            raw = self.reports.get(str(i))
+            if raw is not None:
+                d = json.loads(raw)
+                result.append({
+                    "index":         i,
+                    "contract_name": d.get("contract_name", ""),
+                    "risk_score":    d.get("risk_score", 0),
+                    "decision":      d.get("decision", "")
+                })
+        return json.dumps(result)
 
     @gl.public.view
     def get_traces(self) -> str:
-        return json.dumps([{
-            "input":          t.user_input,
-            "executor":       t.executor,
-            "confidence":     int(t.confidence),
-            "consensus_used": t.consensus_used,
-            "source":         t.source,
-            "reason":         t.reasoning
-        } for t in self.traces])
+        result = []
+        total = int(self.trace_count)
+        start = max(0, total - MAX_TRACES)
+        for i in range(start, total):
+            raw = self.traces.get(str(i))
+            if raw is not None:
+                result.append(json.loads(raw))
+        return json.dumps(result)
 
     @gl.public.view
     def get_executors(self) -> str:
@@ -599,6 +631,13 @@ class GenRoute(gl.Contract):
             "cost_tier":        int(e.cost_tier),
             "confidence_boost": int(e.confidence_boost)
         } for e in self.executors])
+
+    @gl.public.view
+    def get_route_key(self, user_input: str) -> str:
+        """Returns the routing_memory key for a given user_input.
+        Use this to get the correct key for record_outcome."""
+        raw_input = user_input[:300].strip()
+        return _hash(raw_input.lower(), "intent")
 
     @gl.public.view
     def get_threshold(self) -> u32:
