@@ -1,1 +1,0 @@
-cd C:\Users\1\Videos\GenRoute-AI-v3\GenRoute-AI-fixed && set PYTHONPATH=%CD% && python -m unittest discover -s tests -p "*.py" -v > test_results.txt
