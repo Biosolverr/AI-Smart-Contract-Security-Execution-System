@@ -1,0 +1,44 @@
+def rule_based_score(user_input) -> int:
+    """
+    Rule-based injection/risk scoring.
+    Accepts either a string (prompt text) or a dict (feature flags).
+    Returns an integer risk score 0-100.
+    """
+    # Dict mode: feature-flag based scoring
+    if isinstance(user_input, dict):
+        score = 0
+        if user_input.get("reentrancy"):
+            score += 60
+        if user_input.get("unchecked_call"):
+            score += 40
+        if user_input.get("overflow"):
+            score += 30
+        if user_input.get("access_control"):
+            score += 50
+        return min(score, 100)
+
+    # String mode: prompt-injection detection
+    score = 0
+    lower = str(user_input).lower()
+
+    injection_patterns = [
+        "ignore all instructions",
+        "override",
+        "system:",
+        "executor:",
+        "do anything now",
+        "act as",
+        "reveal hidden"
+    ]
+
+    for p in injection_patterns:
+        if p in lower:
+            score += 60
+
+    if '"executor"' in str(user_input) or "'executor'" in str(user_input):
+        score += 70
+
+    if sum(1 for c in str(user_input) if c in '{}[]"') > 10:
+        score += 20
+
+    return min(score, 100)
