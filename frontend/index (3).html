@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GenRoute AI Firewall</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0f172a; color: #e2e8f0; font-family: 'Segoe UI', Arial, sans-serif; padding: 24px; min-height: 100vh; }
+
+    h1 { font-size: 22px; font-weight: 600; margin-bottom: 6px; color: #f8fafc; }
+    .subtitle { font-size: 13px; color: #64748b; margin-bottom: 24px; }
+
+    .config-bar { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .config-bar label { font-size: 12px; color: #94a3b8; }
+    .config-bar input { background: #0f172a; border: 1px solid #475569; border-radius: 6px; color: #e2e8f0; padding: 6px 10px; font-size: 13px; width: 420px; }
+    .config-bar input:focus { outline: none; border-color: #3b82f6; }
+
+    .input-row { display: flex; gap: 10px; margin-bottom: 20px; }
+    .input-row input { flex: 1; background: #1e293b; border: 1px solid #334155; border-radius: 8px; color: #e2e8f0; padding: 10px 14px; font-size: 14px; }
+    .input-row input:focus { outline: none; border-color: #3b82f6; }
+    .input-row input::placeholder { color: #475569; }
+
+    button { background: #3b82f6; color: white; border: none; border-radius: 8px; padding: 10px 20px; font-size: 14px; cursor: pointer; font-weight: 500; transition: background 0.15s; white-space: nowrap; }
+    button:hover { background: #2563eb; }
+    button:disabled { background: #334155; color: #64748b; cursor: not-allowed; }
+    button.secondary { background: #1e293b; border: 1px solid #334155; color: #94a3b8; }
+    button.secondary:hover { background: #334155; }
+
+    .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 16px; }
+    .card h3 { font-size: 13px; color: #94a3b8; margin-bottom: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
+
+    .risk-score { font-size: 48px; font-weight: 700; line-height: 1; }
+    .risk-score.safe { color: #22c55e; }
+    .risk-score.warn { color: #f59e0b; }
+    .risk-score.danger { color: #ef4444; }
+    .risk-label { font-size: 13px; margin-top: 6px; }
+
+    .executor-badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 500; }
+    .executor-financial { background: #1d4ed8; color: #bfdbfe; }
+    .executor-audit { background: #0f766e; color: #99f6e4; }
+    .executor-social { background: #7c3aed; color: #ddd6fe; }
+    .executor-consensus { background: #9f1239; color: #fecdd3; }
+    .executor-compliance { background: #92400e; color: #fde68a; }
+
+    .source-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; margin-left: 6px; }
+    .source-fresh { background: #064e3b; color: #6ee7b7; }
+    .source-memory { background: #1e3a5f; color: #93c5fd; }
+    .source-pre_filter { background: #4c1d95; color: #ddd6fe; }
+    .source-cache { background: #1a2e1a; color: #86efac; }
+
+    .detail-row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; border-bottom: 1px solid #0f172a; }
+    .detail-row:last-child { border-bottom: none; }
+    .detail-label { color: #64748b; }
+    .detail-val { color: #e2e8f0; font-family: monospace; }
+
+    .logs-table { width: 100%; background: #1e293b; border: 1px solid #334155; border-radius: 10px; overflow: hidden; }
+    .logs-table th { background: #0f172a; padding: 10px 14px; text-align: left; font-size: 12px; color: #64748b; font-weight: 500; border-bottom: 1px solid #334155; }
+    .logs-table td { padding: 10px 14px; font-size: 13px; border-bottom: 1px solid #1e293b; vertical-align: top; }
+    .logs-table tr:last-child td { border-bottom: none; }
+    .logs-table tr:hover td { background: #243044; }
+
+    .findings { display: flex; flex-direction: column; gap: 8px; }
+    .finding { background: #0f172a; border-left: 3px solid #ef4444; border-radius: 0 6px 6px 0; padding: 8px 12px; }
+    .finding.high { border-color: #f97316; }
+    .finding.medium { border-color: #f59e0b; }
+    .finding.low { border-color: #22c55e; }
+    .finding-title { font-size: 13px; font-weight: 500; color: #f8fafc; }
+    .finding-meta { font-size: 11px; color: #64748b; margin-top: 2px; }
+    .finding-rec { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+
+    .status { font-size: 12px; padding: 6px 12px; border-radius: 6px; margin-bottom: 16px; }
+    .status.loading { background: #1e3a5f; color: #93c5fd; }
+    .status.success { background: #064e3b; color: #6ee7b7; }
+    .status.error { background: #4c1d1d; color: #fca5a5; }
+    .status.info { background: #1e293b; color: #94a3b8; }
+
+    .empty { text-align: center; padding: 32px; color: #475569; font-size: 14px; }
+    .tabs { display: flex; gap: 4px; margin-bottom: 16px; }
+    .tab { padding: 7px 16px; border-radius: 6px; font-size: 13px; cursor: pointer; border: 1px solid transparent; color: #64748b; background: transparent; }
+    .tab.active { background: #1e293b; border-color: #334155; color: #e2e8f0; }
+    .tab:hover:not(.active) { color: #94a3b8; }
+    .confidence-bar { height: 4px; background: #334155; border-radius: 2px; margin-top: 4px; }
+    .confidence-fill { height: 100%; border-radius: 2px; background: #3b82f6; }
+    .key-copy { font-size: 10px; font-family: monospace; color: #475569; cursor: pointer; }
+    .key-copy:hover { color: #94a3b8; }
+  </style>
+</head>
+<body>
+
+<h1>🛡 GenRoute AI Firewall</h1>
+<p class="subtitle">Connected to GenLayer Testnet · FulGenRoute contract</p>
+
+<div class="config-bar">
+  <label>Contract address:</label>
+  <input id="contractAddr" value="PASTE_CONTRACT_ADDRESS_HERE" placeholder="0x..." />
+  <label>RPC:</label>
+  <input id="rpcUrl" value="https://studio.genlayer.com/api" style="width:220px" />
+</div>
+
+<div id="statusMsg" class="status info">Enter a contract address above, then type your request and click Route.</div>
+
+<div class="input-row">
+  <input id="userInput" placeholder="e.g. Transfer 100 USDC to Alice · or · Audit this contract for vulnerabilities" />
+  <button onclick="runRoute()" id="routeBtn">Route</button>
+  <button onclick="loadTraces()" class="secondary" id="tracesBtn">Refresh Traces</button>
+</div>
+
+<div class="cards" id="resultCards" style="display:none">
+  <div class="card">
+    <h3>Risk Score Card</h3>
+    <div class="risk-score" id="riskScore">—</div>
+    <div class="risk-label" id="riskLabel"></div>
+    <div style="margin-top:14px">
+      <div class="detail-row"><span class="detail-label">Executor</span><span class="detail-val" id="resExecutor">—</span></div>
+      <div class="detail-row"><span class="detail-label">Confidence</span><span class="detail-val" id="resConfidence">—</span></div>
+      <div class="detail-row"><span class="detail-label">Source</span><span class="detail-val" id="resSource">—</span></div>
+      <div class="detail-row"><span class="detail-label">Consensus used</span><span class="detail-val" id="resConsensus">—</span></div>
+      <div class="detail-row"><span class="detail-label">Key</span><span class="detail-val key-copy" id="resKey" onclick="copyKey()">—</span></div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Vulnerability Report</h3>
+    <div class="findings" id="findings"><div class="empty">Run analyze_contract to see findings</div></div>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('traces')">Routing Traces</button>
+  <button class="tab" onclick="switchTab('reports')">Security Reports</button>
+</div>
+
+<div id="tabTraces">
+  <table class="logs-table" id="tracesTable">
+    <thead><tr>
+      <th>#</th><th>Input</th><th>Executor</th><th>Confidence</th><th>Source</th><th>Reason</th>
+    </tr></thead>
+    <tbody id="tracesBody">
+      <tr><td colspan="6" class="empty">Click "Refresh Traces" to load routing history</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div id="tabReports" style="display:none">
+  <table class="logs-table" id="reportsTable">
+    <thead><tr>
+      <th>#</th><th>Contract</th><th>Risk Score</th><th>Decision</th>
+    </tr></thead>
+    <tbody id="reportsBody">
+      <tr><td colspan="4" class="empty">Click "Refresh Traces" to load security reports</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+function getAddr() { return document.getElementById('contractAddr').value.trim(); }
+function getRpc()  { return document.getElementById('rpcUrl').value.trim(); }
+function setStatus(msg, type='info') {
+  const el = document.getElementById('statusMsg');
+  el.textContent = msg;
+  el.className = 'status ' + type;
+}
+
+async function callView(method, args=[]) {
+  const body = { jsonrpc:'2.0', id:1, method:'eth_call', params:[{
+    to: getAddr(),
+    data: JSON.stringify({ method, args })
+  }, 'latest']};
+  try {
+    const r = await fetch(getRpc(), { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const j = await r.json();
+    if (j.result) return JSON.parse(j.result);
+    return null;
+  } catch(e) { return null; }
+}
+
+async function runRoute() {
+  const input = document.getElementById('userInput').value.trim();
+  if (!input) { setStatus('Please enter a request', 'error'); return; }
+  if (!getAddr() || getAddr() === 'PASTE_CONTRACT_ADDRESS_HERE') {
+    setStatus('Please enter the contract address', 'error'); return;
+  }
+
+  document.getElementById('routeBtn').disabled = true;
+  setStatus('Routing request... (may take 1-3 min for consensus)', 'loading');
+
+  try {
+    const result = await callView('route', [input]);
+    if (!result) {
+      setStatus('Could not connect to GenLayer RPC. Check contract address and RPC URL.', 'error');
+      document.getElementById('routeBtn').disabled = false;
+      return;
+    }
+
+    showResult(result, input);
+    setStatus(`Routed successfully → ${result.executor} (${result.source})`, 'success');
+  } catch(e) {
+    setStatus('Error: ' + e.message, 'error');
+  }
+  document.getElementById('routeBtn').disabled = false;
+}
+
+function showResult(data, input) {
+  document.getElementById('resultCards').style.display = 'grid';
+  const conf = data.confidence || 0;
+
+  // Risk score card
+  const score = data.consensus_used ? 85 : (100 - conf);
+  const el = document.getElementById('riskScore');
+  el.textContent = conf;
+  el.className = 'risk-score ' + (conf >= 80 ? 'safe' : conf >= 50 ? 'warn' : 'danger');
+  document.getElementById('riskLabel').innerHTML =
+    `<span class="confidence-bar"><span class="confidence-fill" style="width:${conf}%"></span></span>`;
+
+  // Executor badge
+  const execEl = document.getElementById('resExecutor');
+  const cls = 'executor-' + (data.executor||'').split('_')[0];
+  execEl.innerHTML = `<span class="executor-badge ${cls}">${data.executor||'—'}</span>`;
+
+  document.getElementById('resConfidence').textContent = `${conf}%`;
+
+  const src = data.source || 'fresh';
+  document.getElementById('resSource').innerHTML =
+    `<span class="source-badge source-${src}">${src}</span>`;
+  document.getElementById('resConsensus').textContent = data.consensus_used ? 'Yes' : 'No';
+  document.getElementById('resKey').textContent = data.key || '—';
+  document.getElementById('resKey').dataset.key = data.key || '';
+
+  // Injection warning in findings
+  if (data.source === 'pre_filter') {
+    document.getElementById('findings').innerHTML = `
+      <div class="finding">
+        <div class="finding-title">Injection Detected</div>
+        <div class="finding-meta">severity: BLOCKED · source: pre_filter</div>
+        <div class="finding-rec">reason: ${data.reason || 'injection_detected'}</div>
+      </div>`;
+  }
+}
+
+function copyKey() {
+  const key = document.getElementById('resKey').dataset.key;
+  if (key) { navigator.clipboard.writeText(key); setStatus('Key copied: ' + key, 'info'); }
+}
+
+async function loadTraces() {
+  if (!getAddr() || getAddr() === 'PASTE_CONTRACT_ADDRESS_HERE') {
+    setStatus('Please enter the contract address', 'error'); return;
+  }
+  setStatus('Loading traces and reports...', 'loading');
+
+  const [traces, reports] = await Promise.all([
+    callView('get_traces'),
+    callView('get_all_reports')
+  ]);
+
+  renderTraces(traces);
+  renderReports(reports);
+  setStatus('Loaded ' + (traces||[]).length + ' traces, ' + (reports||[]).length + ' reports', 'success');
+}
+
+function renderTraces(traces) {
+  const tbody = document.getElementById('tracesBody');
+  if (!traces || !traces.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">No traces yet — route some requests first</td></tr>';
+    return;
+  }
+  tbody.innerHTML = [...traces].reverse().map((t, i) => {
+    const src = t.source || 'fresh';
+    const cls = 'executor-' + (t.executor||'').split('_')[0];
+    return `<tr>
+      <td style="color:#475569">${traces.length - i}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${t.input}">${t.input||'—'}</td>
+      <td><span class="executor-badge ${cls}">${t.executor||'—'}</span></td>
+      <td>
+        <div>${t.confidence||0}%</div>
+        <div class="confidence-bar"><div class="confidence-fill" style="width:${t.confidence||0}%"></div></div>
+      </td>
+      <td><span class="source-badge source-${src}">${src}</span></td>
+      <td style="color:#64748b;font-size:12px">${t.reason||''}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderReports(reports) {
+  const tbody = document.getElementById('reportsBody');
+  if (!reports || !reports.length) {
+    tbody.innerHTML = '<tr><td colspan="4" class="empty">No security reports yet</td></tr>';
+    return;
+  }
+  tbody.innerHTML = reports.map(r => {
+    const score = r.risk_score || 0;
+    const color = score >= 80 ? '#ef4444' : score >= 50 ? '#f59e0b' : '#22c55e';
+    const decColor = r.decision === 'block' ? '#ef4444' : r.decision === 'warn' ? '#f59e0b' : '#22c55e';
+    return `<tr>
+      <td style="color:#475569">${r.index}</td>
+      <td style="font-family:monospace;font-size:12px">${r.contract_name||'—'}</td>
+      <td><span style="color:${color};font-weight:600">${score}</span><div class="confidence-bar"><div class="confidence-fill" style="width:${score}%;background:${color}"></div></div></td>
+      <td><span style="color:${decColor};font-weight:500">${r.decision||'—'}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function switchTab(tab) {
+  document.getElementById('tabTraces').style.display = tab === 'traces' ? 'block' : 'none';
+  document.getElementById('tabReports').style.display = tab === 'reports' ? 'block' : 'none';
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    t.classList.toggle('active', (i===0 && tab==='traces') || (i===1 && tab==='reports'));
+  });
+}
+</script>
+</body>
+</html>
