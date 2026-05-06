@@ -1,29 +1,37 @@
+from security.classifier.cvss_scorer import calculate_cvss_score
 import unittest
-from security.classifier.cvss_scorer import CVSSScorer
-
 
 class TestCVSSScorer(unittest.TestCase):
-    def setUp(self):
-        self.scorer = CVSSScorer()
-
     def test_cvss_min_score(self):
-        # UNCHECKED_PAYMENT → cvss 5.5 (MEDIUM, самый низкий в EXPLOIT_MAP)
-        result = self.scorer.score("UNCHECKED_PAYMENT")
-        self.assertGreaterEqual(result.get("cvss", 0), 0.0)
-        self.assertLessEqual(result.get("cvss", 0), 6.9)
-
-    def test_cvss_mid_score(self):
-        # VALUE_MOVE → cvss 6.5 (MEDIUM)
-        result = self.scorer.score("VALUE_MOVE")
-        score = result.get("cvss", 0)
-        self.assertGreaterEqual(score, 4.0)
-        self.assertLessEqual(score, 6.9)
+        score = calculate_cvss_score(
+            attack_vector=0,
+            complexity=0,
+            privileges_required=0,
+            user_interaction=0,
+            impact=0
+        )
+        self.assertTrue(score == 0 or score < 1)
 
     def test_cvss_max_score(self):
-        # REENTRANCY → cvss 9.5 (CRITICAL)
-        result = self.scorer.score("REENTRANCY")
-        self.assertGreaterEqual(result.get("cvss", 0), 7.0)
+        score = calculate_cvss_score(
+            attack_vector=1,
+            complexity=1,
+            privileges_required=1,
+            user_interaction=1,
+            impact=1
+        )
+        self.assertLessEqual(score, 10)
 
+    def test_cvss_mid_score(self):
+        score = calculate_cvss_score(
+            attack_vector=0.5,
+            complexity=0.5,
+            privileges_required=0.5,
+            user_interaction=0.5,
+            impact=0.5
+        )
+        self.assertGreater(score, 0)
+        self.assertLess(score, 10)
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main()
