@@ -1,0 +1,50 @@
+class DiffEngine:
+    """
+    Computes state diff between two contract snapshots.
+    Safe against missing keys — uses .get() with defaults.
+    """
+
+    def compare(self, state1: dict, state2: dict) -> dict:
+        """
+        Returns a dict of keys that changed, mapping key -> (before, after).
+        Used by Phase-1 tests.
+        """
+        all_keys = set(state1) | set(state2)
+        result = {}
+        for k in all_keys:
+            v1 = state1.get(k)
+            v2 = state2.get(k)
+            if v1 != v2:
+                result[k] = (v1, v2)
+        return result
+
+    def diff(self, before: dict, after: dict) -> list:
+        changes = []
+
+        before_balances = before.get("balances", {})
+        after_balances = after.get("balances", {})
+        all_balance_keys = set(before_balances) | set(after_balances)
+        for k in all_balance_keys:
+            b = before_balances.get(k, 0)
+            a = after_balances.get(k, 0)
+            if b != a:
+                changes.append(f"balance[{k}]: {b} → {a} (delta {a - b:+})")
+
+        before_storage = before.get("storage", {})
+        after_storage = after.get("storage", {})
+        all_storage_keys = set(before_storage) | set(after_storage)
+        for k in all_storage_keys:
+            b = before_storage.get(k)
+            a = after_storage.get(k)
+            if b != a:
+                changes.append(f"storage[{k}]: {b!r} → {a!r}")
+
+        scalar_keys = set(before) | set(after)
+        scalar_keys -= {"balances", "storage"}
+        for k in scalar_keys:
+            b = before.get(k)
+            a = after.get(k)
+            if b != a:
+                changes.append(f"{k}: {b!r} → {a!r}")
+
+        return changes
