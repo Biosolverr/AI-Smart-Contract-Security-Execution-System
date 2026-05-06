@@ -1,191 +1,149 @@
-[README.md](https://github.com/user-attachments/files/27248532/README.md)
-# GenRoute AI
+GenRoute AI
+AI-powered intent routing and smart contract security system built on GenLayer.
 
-AI-powered intent routing meta-layer built on top of GenLayer.
+What is this?
+GenRoute is an intelligent middleware that sits between a user's natural language request and blockchain execution. It reads what the user wants, classifies it using LLMs running inside a GenLayer smart contract, routes the request to the right executor, and remembers the result to get smarter over time.
+Unlike traditional smart contracts with hardcoded logic, GenRoute dynamically understands intent — and blocks injection attacks before they ever reach the LLM.
 
-## Overview
+Core Contract: FulGenRoute.py
+This is the main deployed contract. All testing was performed on this file on GenLayer Testnet.
+How routing works
+User writes natural language input
+        ↓
+[Pre-filter] — rule-based injection & uncertainty detection (no LLM)
+        ↓
+[LLM Classifier] — base64-encoded input → executor + confidence score
+        ↓
+      confidence ≥ threshold?
+       YES              NO
+        ↓               ↓
+  [Executor]    [consensus_executor fallback]
+        ↓
+  [commit_route] — deterministic storage write
+        ↓
+  [routing_memory] — cached for future requests
+Public Methods
+MethodTypeDescriptionroute(user_input)writeClassifies intent via LLM, returns executor + key. Does NOT write to storage.commit_route(user_input, executor, confidence, source, reason)writePersists routing result to traces and routing_memory. Call after route().analyze_contract(source, label)writeRuns 4-layer AI security pipeline: parse → attack gen → simulate → classify.commit_analyze(source, label, contract_name, risk_score, decision, findings_json, attacks_json)writePersists analysis report to storage. Call after analyze_contract().record_outcome(key, executor, success)writeUpdates routing memory with feedback. Owner-only.register_executor(name, description, cost_tier, confidence_boost)writeAdds new executor. Owner-only.set_threshold(value)writeSets consensus fallback threshold 1-99. Owner-only.get_route_key(user_input)viewReturns the routing_memory key for a given input. Use for record_outcome.get_traces()viewReturns full routing history.get_all_reports()viewReturns list of all security reports.get_report(index)viewReturns full report with findings at given index.get_executors()viewLists all registered executors.get_threshold()viewReturns current consensus threshold.
+Why two steps? (route + commit_route)
+GenLayer does not persist storage writes from methods that call run_nondet_unsafe (LLM calls). The route() method calls the LLM — so its storage writes are discarded after finalization. commit_route() is a deterministic follow-up that actually saves to the blockchain. This is a GenLayer architecture constraint, not a contract bug.
+Same pattern applies to analyze_contract + commit_analyze.
 
-GenRoute is an intelligent routing middleware that sits between user input and blockchain execution. It analyzes natural language intents, classifies them using LLMs, routes them to appropriate executors, learns from historical outcomes, and triggers multi-validator consensus for ambiguous or high-risk operations.
+Built-in Executors
+ExecutorPurposeCost Tierfinancial_executorPayments, DeFi, token transfers2audit_executorSmart contract security analysis3social_executorDAO governance, proposals, voting1consensus_executorFallback for ambiguous or high-risk requests3
+New executors can be added by the owner via register_executor().
 
-Unlike traditional smart contracts with hardcoded logic paths, GenRoute dynamically determines execution routes based on semantic understanding of user requests.
+Security Features
+Pre-filter (rule-based, before LLM)
+The contract checks every input against injection and uncertainty patterns before the LLM ever sees it:
+pythonINJECTION_PATTERNS = [
+    "ignore previous", "override", "bypass", "route to ",
+    "executor:", "\"executor\"", "confidence 100", ...
+]
+UNCERTAINTY_PATTERNS = [
+    "or don't", "i'm not sure", "maybe", "whatever", "just do", ...
+]
+Matched inputs → consensus_executor, source=pre_filter, no LLM call.
+Base64 encoding
+User input is base64-encoded before being sent to the LLM, with explicit instruction to treat decoded content as untrusted data.
+Confidence threshold
+If LLM confidence < threshold (default 70%) → consensus_executor fallback.
 
-## Core Functionality
+Repository Structure
+AI-Smart-Contract-Security-Execution-System/
+├── FulGenRoute.py              # Main contract — deploy this
+├── frontend/
+│   ├── index.html              # Dashboard UI — open in browser
+│   ├── app.js                  # UI logic
+│   ├── config.js               # Contract address + RPC config
+│   └── dashboard/              # VulnerabilityReport, RiskScoreCard, etc.
+├── security/
+│   ├── signals.py              # Rule-based injection scorer
+│   ├── simulator/diff_engine.py
+│   ├── classifier/cvss_scorer.py
+│   └── routing/policy_engine.py
+├── analysis/parser/            # Solidity AST parser
+├── tests_fasha-1/              # Phase 1 unit tests
+├── tests_fasha2/               # Phase 2 integration test reports
+├── tests_fasha-3/              # Phase 3 integration test reports
+├── tests_fasha-4/              # Phase 4 E2E test reports
+└── README.md
 
-### Intent Classification
-The system parses free-form natural language input through an integrated LLM to determine the nature of the requested operation. Input sanitization mechanisms are applied before model invocation to mitigate prompt injection attacks.
+Deployment
+Requirements
 
-### Executor Routing
-Based on classification results, requests are routed to specialized executors:
+GenLayer Studio (browser) or GenLayer CLI
+Python 3.8+
 
-| Executor | Purpose | Cost Tier |
-|----------|---------|-----------|
-| `financial_executor` | Payments, DeFi operations, token transfers | High |
-| `audit_executor` | Smart contract security analysis, vulnerability scanning | Medium |
-| `social_executor` | DAO governance, proposals, voting mechanisms | Low |
-| `consensus_executor` | Ambiguous or high-risk operations requiring multi-validator approval | High |
+Deploy via GenLayer Studio
 
-New executors can be registered by contract owners through the `register_executor()` method.
+Open GenLayer Studio
+Upload FulGenRoute.py
+Click Deploy
+Copy the contract address
+Open frontend/config.js and paste the address
 
-### Adaptive Memory System
-The routing layer maintains a history of executed intents and their outcomes. When an identical or similar intent is encountered, the system applies a confidence boost based on historical success rates. This creates a feedback loop where routing accuracy improves over time.
+Deploy via CLI
+bashgenlayer deploy FulGenRoute.py --network testnet
+Usage example
+python# Step 1 — classify
+result = contract.route("Transfer 100 USDC to Alice")
+# → {"executor": "financial_executor", "confidence": 95, "source": "fresh", "key": "intent_..."}
 
-### Consensus Fallback Mechanism
-When the LLM's confidence score falls below a configurable threshold (default: 70%), the request is automatically routed through the consensus executor. This ensures that uncertain classifications receive additional validation before execution.
+# Step 2 — persist
+contract.commit_route(
+    user_input="Transfer 100 USDC to Alice",
+    executor="financial_executor",
+    confidence=95,
+    source="fresh",
+    reason="Standard financial transfer"
+)
 
-## Architecture
-User Intent (Natural Language)
-↓
-[Input Sanitizer]
-↓
-[LLM Intent Classifier] → Confidence Score
-↓
-┌────┴────┐
-│ │
-High Conf. Low Conf. (< threshold)
-│ │
-↓ ↓
-[Executor [Consensus
-Selection] Fallback]
-│ │
-└────┬────┘
-↓
-[Memory Update] ← Record outcome for learning
-↓
-[Execution on GenLayer]
+# Step 3 — verify
+contract.get_traces()
+# → [{"input": "Transfer 100 USDC to Alice", "executor": "financial_executor", ...}]
 
-text
+Frontend
+Open frontend/index.html in a browser. Enter the deployed contract address and RPC URL. The dashboard shows:
 
-## Repository Structure
-genroute-ai/
-├── GenRoute.py # Main intelligent contract implementation
-├── contracts/ # Contract deployment artifacts
-│ └── tests/ # Contract test suites
-├── frontend/ # Dashboard and UI components
-│ ├── dashboard/ # Monitoring interface
-│ ├── app.js # Frontend application logic
-│ └── index.html # Entry point
-├── security/ # Security analysis modules
-│ ├── attack_classifier.py # Attack pattern detection
-│ ├── attacks/ # Known attack vectors
-│ ├── classifier/ # Classification algorithms
-│ ├── pipeline/ # Security processing pipeline
-│ ├── routing/ # Secure routing logic
-│ └── simulator/ # Attack simulation tools
-├── analysis/ # Data analysis utilities
-│ ├── graph/ # Graph-based analysis
-│ └── parser/ # Input parsing modules
-├── product/ # Product configuration and API
-│ ├── api/ # API definitions
-│ ├── config.py # Configuration settings
-│ └── main.py # Application entry point
-├── scripts/ # Deployment and utility scripts
-│ ├── deploy.py # Deployment automation
-│ └── run_full_pipeline.py # End-to-end pipeline execution
-└── workspace/ # Development workspace
+Risk Score Card — confidence, executor, source, and routing key for each request
+Vulnerability Report — findings from analyze_contract pipeline
+Routing Traces — full history of all routed requests
+Security Reports — all analyze_contract results with risk scores
 
-text
 
-## Installation and Deployment
+The frontend uses GenLayer's JSON-RPC API to call view methods (get_traces, get_all_reports) and displays results in real time. Write methods (route, commit_route) must still be called via GenLayer Studio or CLI.
 
-### Prerequisites
-- GenLayer CLI or access to GenLayer Studio
-- Python 3.x environment
-- Network access to GenLayer testnet or mainnet
 
-### Deployment Steps
+Test Results
+Phase 1 — Unit Tests (Python modules)
+11 tests across 4 modules. Run from project root:
+bashcd AI-Smart-Contract-Security-Execution-System
+python -m pytest tests_fasha-1/ -v
+ModuleTestsResultcvss_scorer.py3✅ Passsignals.py2✅ Passdiff_engine.py3✅ Passpolicy_engine.py3✅ Pass
+Phase 2 — Contract Method Tests (GenLayer Studio)
+32 manual tests across threshold, executor, outcome, security, and analysis blocks.
+30/32 passed. 2 failures were prompt injection attacks that bypassed LLM-based detection (documented as known limitations).
+Phase 3 — Integration Tests
+8 tests verifying cross-method state persistence.
+8/8 passed. Key finding: route() + commit_route() two-step pattern required for storage persistence.
+Phase 4 — E2E Scenarios
+5 full user scenarios including security audit flow, injection stress test, memory stress, boundary values, and feedback loop.
+5/5 passed. All deviations were environment limitations, not contract bugs.
+See /tests_fasha-1/, /tests_fasha2/, /tests_fasha-3/, /tests_fasha-4/ for full reports and transaction hashes.
 
-1. **Deploy the contract:**
-   ```bash
-   # Using GenLayer CLI
-   genlayer deploy GenRoute.py --network testnet
-   
-   # Or via GenLayer Studio - upload GenRoute.py and deploy
-Route an intent:
+Known Limitations (v1)
+LimitationStatusNotesTwo-step routingArchitecture constraintGenLayer does not persist storage from nondet methods. route() + commit_route() is the required pattern.Russian/non-ASCII injectionsPartial mitigationINJECTION_PATTERNS covers English only. LLM catches many cases anyway (tested: Russian blocked in S-02).analyze_contract source limit8000 chars maxLarge contracts need to be split or summarized before analysis.Disagree on LLM methodsExpectedAll validators run independently with different LLMs — byte-identical output is impossible. FINALIZED = correct result.FulGenRoute schema errorUnresolvedFulGenRoute has additional fields that cause schema issues on some GenLayer builds. TestGenRoute (same logic, minimal schema) deploys reliably.
 
-python
-contract.route("Vote for proposal #42")
-# Returns: "social_executor"
-Record execution outcomes:
-
-python
-contract.record_outcome("intent_a3f2c1d0", "social_executor", success=True)
-# Updates memory for future confidence boosting
-Configure consensus threshold:
-
-python
-contract.set_threshold(80)  # More conservative routing
-contract.set_threshold(50)  # More permissive routing
-Public API Reference
-Method	Type	Description
-route(user_input)	write	Classifies intent and returns target executor name
-record_outcome(key, executor, success)	write	Updates routing memory with execution outcome
-register_executor(name, description, tier, boost)	write	Registers new executor (owner-only)
-set_threshold(value)	write	Sets consensus fallback threshold (owner-only)
-get_threshold()	view	Returns current consensus threshold
-get_executors()	view	Lists all registered executors
-get_traces()	view	Returns routing history
-get_failure_log()	view	Returns failure history
-memory_size()	view	Returns count of entries in routing memory
 Implementation Status
-Component	Status	Notes
-Intent Router	✓ Complete	LLM-based classification implemented
-Executor Layer	✓ Complete	Four built-in executors operational
-Memory Layer	✓ Complete	Outcome recording and confidence boosting functional
-Input Sanitizer	✓ Complete	Basic prompt injection mitigation
-Consensus Fallback	⚠ Partial	Currently a routing label; multi-model voting planned for v2
-Memory Cap	⚠ Planned	Unbounded growth; LRU/circular buffer in v2
-Executor Removal	⚠ Planned	Deregistration functionality in v2
-Current State: Prototype stage, tested on GenLayer Testnet. Not recommended for production use without addressing known limitations.
-
-Security Considerations
-A comprehensive security audit is available in the codebase. Key identified risks:
-
-Prompt Injection: While input sanitization is implemented, the system is not fully immune. LLM post-validation serves as secondary defense.
-
-Unrestricted Memory Writes: The record_outcome() method accepts calls from any address, allowing potential memory poisoning. Access control mechanisms planned for v2.
-
-Unbounded Storage Growth: Traces, memory entries, and failure logs have no capacity limits, which could lead to excessive gas costs or storage exhaustion. Mitigation via LRU eviction and circular buffers scheduled for v2.
-
-Consensus Mechanism Limitation: The consensus_executor currently functions as a routing label rather than executing genuine multi-AI validation. True multi-model voting architecture is under development.
-
-Risk Assessment: MEDIUM to HIGH for production deployments without v2 enhancements.
+ComponentStatusNotesIntent Router✅ CompleteLLM + rule-based pre-filterExecutor Layer✅ Complete4 built-in + dynamic registrationMemory Layer✅ CompleteCircular buffer (MAX 200 traces, 100 reports, 500 memory keys)Input Sanitizer✅ Complete20+ injection patterns + uncertainty detectionOwner access control✅ Completerecord_outcome, register_executor, set_threshold — owner-onlyStorage persistence✅ Complete via commit patternTwo-step route+commit solves GenLayer nondet constraintConsensus Fallback✅ CompleteThreshold-based fallback to consensus_executorFrontend Dashboard✅ CompleteView methods connected; write methods via Studio
 
 Technical Foundation
-GenRoute leverages GenLayer's capabilities:
+GenRoute uses three GenLayer capabilities:
 
-GenVM: Enables non-deterministic LLM execution within smart contracts
+GenVM — executes LLM calls inside smart contract logic via run_nondet_unsafe
+Optimistic Democracy — multi-validator consensus where each node runs the contract independently with a different LLM model
+Intelligent Contracts — native Python contracts with AI decision logic
 
-Optimistic Democracy: Multi-validator consensus for dispute resolution
-
-Intelligent Contracts: Native support for AI-driven decision logic
-
-The system is designed as a complement to GenLayer, not a replacement. It orchestrates how user intents are processed before being submitted to the underlying blockchain for execution.
-
-Use Cases
-DeFi Protocols: Automatic routing of complex financial transactions to appropriate validators
-
-DAO Governance: Intelligent classification of proposals and voting operations
-
-Security Auditing: Pre-execution vulnerability scanning for high-risk operations
-
-Cross-Chain Bridges: Intent-based routing for multi-chain operations
-
-NFT Marketplaces: Automated handling of minting, trading, and royalty distributions
-
-Roadmap
-v2 Planned Features:
-
-Multi-model consensus voting implementation
-
-Access control for memory operations
-
-Storage cap enforcement with LRU eviction
-
-Executor deregistration capability
-
-Enhanced prompt injection detection
-
-Reputation scoring for executors
 
 License
-MIT License - Developed for the GenLayer ecosystem.
+MIT License — Built for the GenLayer ecosystem.
