@@ -80,12 +80,12 @@
 
   <div class="config-bar">
     <label>Contract address:</label>
-    <input id="contractAddr" value="0x1b7728618653065413d46f3a3dd6ca0213738a23f1f4a1317f0ed57e6595089e" placeholder="0x..." />
+    <input id="contractAddr" value="0xC3F0D7CafB01222Db25DE46192146972B4358b64" placeholder="0x..." readonly />
     <label>RPC:</label>
-    <input id="rpcUrl" value="https://testnet.genlayer.com" style="width:220px" />
+    <input id="rpcUrl" value="https://testnet.genlayer.com" style="width:220px" readonly />
   </div>
 
-  <div id="statusMsg" class="status info">Enter a contract address above, then type your request and click Route.</div>
+  <div id="statusMsg" class="status info">Type your request and click Route.</div>
 
   <div class="input-row">
     <input id="userInput" placeholder="e.g. Transfer 100 USDC to Alice · or · Audit this contract for vulnerabilities" />
@@ -140,21 +140,13 @@
   </div>
 
   <script>
-    // ===== CONFIG =====
-    const CONFIG = {
-      CONTRACT_ADDRESS: "0x1b7728618653065413d46f3a3dd6ca0213738a23f1f4a1317f0ed57e6595089e",
-      RPC_URL: "https://testnet.genlayer.com"
-    };
+    // ===== HARDCODED CONFIG (ничего менять не нужно) =====
+    const CONTRACT_ADDRESS = "0xC3F0D7CafB01222Db25DE46192146972B4358b64";
+    const RPC_URL = "https://testnet.genlayer.com";
 
     // ===== HELPERS =====
-    function getAddr() {
-      const val = document.getElementById('contractAddr').value.trim();
-      return val && val !== 'PASTE_CONTRACT_ADDRESS_HERE' ? val : CONFIG.CONTRACT_ADDRESS;
-    }
-    function getRpc() {
-      const val = document.getElementById('rpcUrl').value.trim();
-      return val || CONFIG.RPC_URL;
-    }
+    function getAddr() { return CONTRACT_ADDRESS; }
+    function getRpc() { return RPC_URL; }
     function setStatus(msg, type='info') {
       const el = document.getElementById('statusMsg');
       el.textContent = msg;
@@ -169,7 +161,7 @@
         method: 'eth_call',
         params: [{
           to: getAddr(),
-          data: encodePayload(method, args)
+          data: '0x' + Buffer.from(JSON.stringify({ method, args }), 'utf8').toString('hex')
         }, 'latest']
       };
       try {
@@ -187,13 +179,6 @@
       }
     }
 
-    // Простая кодировка вызова метода (адаптируйте под ваш контракт)
-    function encodePayload(method, args) {
-      // Для GenLayer: можно отправлять JSON-строку в data
-      // Если нужен ABI-encoding — подключите ethers.js через CDN
-      return '0x' + Buffer.from(JSON.stringify({ method, args }), 'utf8').toString('hex');
-    }
-
     // ===== ROUTE =====
     async function runRoute() {
       const input = document.getElementById('userInput').value.trim();
@@ -205,7 +190,7 @@
       try {
         const result = await callView('route', [input]);
         if (!result) {
-          setStatus('Could not connect to GenLayer RPC. Check contract address and RPC URL.', 'error');
+          setStatus('Could not connect to GenLayer RPC. Check console for details.', 'error');
           document.getElementById('routeBtn').disabled = false;
           return;
         }
@@ -221,15 +206,12 @@
       document.getElementById('resultCards').style.display = 'grid';
       const conf = data.confidence || 0;
 
-      // Risk score
-      const score = data.consensus_used ? 85 : (100 - conf);
       const el = document.getElementById('riskScore');
       el.textContent = conf;
       el.className = 'risk-score ' + (conf >= 80 ? 'safe' : conf >= 50 ? 'warn' : 'danger');
       document.getElementById('riskLabel').innerHTML =
         `<span class="confidence-bar"><span class="confidence-fill" style="width:${conf}%"></span></span>`;
 
-      // Executor badge
       const execEl = document.getElementById('resExecutor');
       const cls = 'executor-' + (data.executor||'').split('_')[0];
       execEl.innerHTML = `<span class="executor-badge ${cls}">${data.executor||'—'}</span>`;
@@ -241,7 +223,6 @@
       document.getElementById('resKey').textContent = data.key || '—';
       document.getElementById('resKey').dataset.key = data.key || '';
 
-      // Injection warning
       if (data.source === 'pre_filter') {
         document.getElementById('findings').innerHTML = `
           <div class="finding">
@@ -318,13 +299,6 @@
         t.classList.toggle('active', (i===0 && tab==='traces') || (i===1 && tab==='reports'));
       });
     }
-
-    // ===== INIT =====
-    window.addEventListener('DOMContentLoaded', () => {
-      // Авто-заполнение полей из CONFIG
-      document.getElementById('contractAddr').value = CONFIG.CONTRACT_ADDRESS;
-      document.getElementById('rpcUrl').value = CONFIG.RPC_URL;
-    });
   </script>
 </body>
 </html>
