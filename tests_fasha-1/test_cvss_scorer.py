@@ -1,37 +1,44 @@
-from security.classifier.cvss_scorer import calculate_cvss_score
+from security.classifier.cvss_scorer import CVSSScorer
 import unittest
 
+
 class TestCVSSScorer(unittest.TestCase):
+    def setUp(self):
+        self.scorer = CVSSScorer()
+
     def test_cvss_min_score(self):
-        score = calculate_cvss_score(
-            attack_vector=0,
-            complexity=0,
-            privileges_required=0,
-            user_interaction=0,
-            impact=0
-        )
-        self.assertTrue(score == 0 or score < 1)
+        # No targets → overall_cvss should be 0
+        result = self.scorer.score_targets([])
+        self.assertEqual(result["overall_cvss"], 0.0)
+        self.assertEqual(result["overall_severity"], "NONE")
 
     def test_cvss_max_score(self):
-        score = calculate_cvss_score(
-            attack_vector=1,
-            complexity=1,
-            privileges_required=1,
-            user_interaction=1,
-            impact=1
-        )
-        self.assertLessEqual(score, 10)
+        targets = [
+            {
+                "function": "withdraw",
+                "vulnerability": "reentrancy",
+                "cvss": 9.8,
+                "severity": "CRITICAL",
+            }
+        ]
+        result = self.scorer.score_targets(targets)
+        self.assertLessEqual(result["overall_cvss"], 10.0)
+        self.assertGreater(result["overall_cvss"], 0)
 
     def test_cvss_mid_score(self):
-        score = calculate_cvss_score(
-            attack_vector=0.5,
-            complexity=0.5,
-            privileges_required=0.5,
-            user_interaction=0.5,
-            impact=0.5
-        )
-        self.assertGreater(score, 0)
-        self.assertLess(score, 10)
+        targets = [
+            {
+                "function": "transfer",
+                "vulnerability": "overflow",
+                "cvss": 5.0,
+                "severity": "MEDIUM",
+            }
+        ]
+        result = self.scorer.score_targets(targets)
+        self.assertGreater(result["overall_cvss"], 0)
+        self.assertLess(result["overall_cvss"], 10)
+        self.assertIn("details", result)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()
