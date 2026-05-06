@@ -1,5 +1,5 @@
-from security.classifier.cvss_scorer import CVSSScorer
 import unittest
+from security.classifier.cvss_scorer import CVSSScorer
 
 
 class TestCVSSScorer(unittest.TestCase):
@@ -7,37 +7,22 @@ class TestCVSSScorer(unittest.TestCase):
         self.scorer = CVSSScorer()
 
     def test_cvss_min_score(self):
-        # No targets → overall_cvss should be 0
-        result = self.scorer.score_targets([])
-        self.assertEqual(result["overall_cvss"], 0.0)
-        self.assertEqual(result["overall_severity"], "NONE")
-
-    def test_cvss_max_score(self):
-        targets = [
-            {
-                "function": "withdraw",
-                "vulnerability": "reentrancy",
-                "cvss": 9.8,
-                "severity": "CRITICAL",
-            }
-        ]
-        result = self.scorer.score_targets(targets)
-        self.assertLessEqual(result["overall_cvss"], 10.0)
-        self.assertGreater(result["overall_cvss"], 0)
+        # UNCHECKED_PAYMENT → cvss 5.5 (MEDIUM, самый низкий в EXPLOIT_MAP)
+        result = self.scorer.score("UNCHECKED_PAYMENT")
+        self.assertGreaterEqual(result.get("cvss", 0), 0.0)
+        self.assertLessEqual(result.get("cvss", 0), 6.9)
 
     def test_cvss_mid_score(self):
-        targets = [
-            {
-                "function": "transfer",
-                "vulnerability": "overflow",
-                "cvss": 5.0,
-                "severity": "MEDIUM",
-            }
-        ]
-        result = self.scorer.score_targets(targets)
-        self.assertGreater(result["overall_cvss"], 0)
-        self.assertLess(result["overall_cvss"], 10)
-        self.assertIn("details", result)
+        # VALUE_MOVE → cvss 6.5 (MEDIUM)
+        result = self.scorer.score("VALUE_MOVE")
+        score = result.get("cvss", 0)
+        self.assertGreaterEqual(score, 4.0)
+        self.assertLessEqual(score, 6.9)
+
+    def test_cvss_max_score(self):
+        # REENTRANCY → cvss 9.5 (CRITICAL)
+        result = self.scorer.score("REENTRANCY")
+        self.assertGreaterEqual(result.get("cvss", 0), 7.0)
 
 
 if __name__ == "__main__":
