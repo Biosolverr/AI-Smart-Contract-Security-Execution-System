@@ -1,1 +1,78 @@
-жш
+{
+  "_description": "GenLayer Studio — get_traces() + get_all_reports() view proof (state verification)",
+  "contract_address": "0x94...8800",
+
+  "get_traces": {
+    "method": "get_traces",
+    "type": "view",
+    "input": {},
+    "output_raw": "[{\"input\": \"swap 100 USDC to ETH on Uniswap\", \"executor\": \"financial_executor\", \"confidence\": 95, \"consensus_used\": false, \"source\": \"fresh\", \"reason\": \"Decoded input is a standard DeFi token swap request with no prompt injection indicators.\"}]",
+    "output_parsed": [
+      {
+        "input": "swap 100 USDC to ETH on Uniswap",
+        "executor": "financial_executor",
+        "confidence": 95,
+        "consensus_used": false,
+        "source": "fresh",
+        "reason": "Decoded input is a standard DeFi token swap request with no prompt injection indicators."
+      }
+    ],
+    "_purpose": "Shows routing history stored on-chain — proves commit_route() wrote to storage"
+  },
+
+  "get_all_reports": {
+    "method": "get_all_reports",
+    "type": "view",
+    "input": {},
+    "output_raw": "[{\"index\": 0, \"contract_name\": \"VulnerableVault\", \"risk_score\": 50, \"decision\": \"warn\"}]",
+    "output_parsed": [
+      {
+        "index": 0,
+        "contract_name": "VulnerableVault",
+        "risk_score": 50,
+        "decision": "warn"
+      }
+    ],
+    "_purpose": "Shows audit reports stored on-chain — proves commit_analyze() wrote to storage"
+  },
+
+  "get_executors": {
+    "method": "get_executors",
+    "type": "view",
+    "input": {},
+    "output_raw": "[{\"name\": \"financial_executor\", \"description\": \"Handles payments, DeFi, token transfers, and financial risk\", \"cost_tier\": 2, \"confidence_boost\": 10}, {\"name\": \"audit_executor\", \"description\": \"Smart contract security analysis and vulnerability scanning\", \"cost_tier\": 3, \"confidence_boost\": 15}, {\"name\": \"social_executor\", \"description\": \"DAO governance, proposals, voting, and reputation\", \"cost_tier\": 1, \"confidence_boost\": 5}, {\"name\": \"consensus_executor\", \"description\": \"Safe fallback for ambiguous or high-risk intents\", \"cost_tier\": 3, \"confidence_boost\": 20}]",
+    "output_parsed": [
+      {"name": "financial_executor",  "description": "Handles payments, DeFi, token transfers, and financial risk",    "cost_tier": 2, "confidence_boost": 10},
+      {"name": "audit_executor",      "description": "Smart contract security analysis and vulnerability scanning",    "cost_tier": 3, "confidence_boost": 15},
+      {"name": "social_executor",     "description": "DAO governance, proposals, voting, and reputation",             "cost_tier": 1, "confidence_boost": 5},
+      {"name": "consensus_executor",  "description": "Safe fallback for ambiguous or high-risk intents",              "cost_tier": 3, "confidence_boost": 20}
+    ],
+    "_purpose": "Confirms 4 default executors registered at deploy time"
+  },
+
+  "get_threshold": {
+    "method": "get_threshold",
+    "type": "view",
+    "input": {},
+    "output_raw": 70,
+    "_purpose": "Confirms default consensus threshold is 70"
+  },
+
+  "summary": {
+    "total_transactions": 5,
+    "transaction_hashes": [
+      {"method": "deploy",          "hash": "0xee5a40319720233058bf33ea87766c589653f2a21a1b450aee58f824d662c669"},
+      {"method": "route (DeFi)",    "hash": "0x50c932790f522c58e9936982baba2dfbada2ab17080fcdfceeab70bb4627392d"},
+      {"method": "commit_route",    "hash": "0x324dcd7dc3509a710ca852669ca669b0f9f1f609e02a008e02ac808f17661ad0"},
+      {"method": "route (inject)",  "hash": "0x61bfee3c814df1cf9c8e414b5cab899f097bb99e4a5c128ab02399efb5148815"},
+      {"method": "analyze_contract","hash": "0x8d408aa243331b92bb18a696ccaebdd9df9a4fd8e0bf5cde7b034d0008a4d150"},
+      {"method": "commit_analyze",  "hash": "0xe0290ca354b757c30296f6a01d88d98f0c769f34dad65a31bced6d157e23ddb8"}
+    ],
+    "all_finalized": true,
+    "storage_verified": {
+      "routing_memory": true,
+      "traces": true,
+      "reports": true
+    }
+  }
+}
