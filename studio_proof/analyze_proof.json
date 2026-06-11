@@ -1,1 +1,193 @@
-ло
+{
+  "_description": "GenLayer Studio — analyze_contract() execution proof (4-layer AI security pipeline)",
+  "contract_address": "0x94...8800",
+  "test_case": "Reentrancy vulnerability detection in VulnerableVault.sol",
+
+  "step1_analyze_contract": {
+    "method": "analyze_contract",
+    "type": "write",
+    "timestamp": "16 minutes ago",
+    "input": {
+      "args": [
+        "pragma solidity ^0.8.0;\ncontract VulnerableVault {\n    mapping(address => uint) public balances;\n    function deposit() public payable {\n        balances[msg.sender] += msg.value;\n    }\n    function withdraw(uint amount) public {\n        require(balances[msg.sender] >= amount);\n        payable(msg.sender).call{value: amount}(\"\");\n        balances[msg.sender] -= amount;\n    }\n}",
+        "VulnerableVault"
+      ],
+      "method": "analyze_contract"
+    },
+    "transaction_hash": "0x8d408aa243331b92bb18a696ccaebdd9df9a4fd8e0bf5cde7b034d0008a4d150",
+    "status": "FINALIZED",
+    "result": "SUCCESS",
+
+    "output_raw": "{\"contract_name\": \"VulnerableVault\", \"risk_score\": 50, \"decision\": \"warn\", \"findings\": [], \"attacks_simulated\": [{\"name\": \"Recursive Balance Drain\", \"type\": \"reentrancy\", \"target_function\": \"withdraw\", \"payload\": \"Deploy malicious contract with receive() fallback that calls vulnerableVault.withdraw(msg.value). After depositing, trigger initial withdraw. The fallback recursively calls withdraw before balances[msg.sender] is updated.\", \"expected_impact\": \"Complete drain of contract ETH reserves by exploiting check-after-call vulnerability.\"}, {\"name\": \"Malicious Fallback Lock\", \"type\": \"denial_of_service\", \"target_function\": \"withdraw\", \"payload\": \"Interact via a contract address containing a fallback function that always reverts. Deposit funds, then call withdraw. The forced revert on the external value transfer permanently blocks state updates.\", \"expected_impact\": \"Permanent locking of deposited funds for the targeted address, rendering vault balance inaccessible.\"}, {\"name\": \"Balance Underflow Exploit\", \"type\": \"integer_overflow\", \"target_function\": \"withdraw\", \"payload\": \"Call withdraw with a value larger than the stored balance. In the absence of explicit checks or SafeMath, balances[msg.sender] wraps around to a maximum uint256 value.\", \"expected_impact\": \"Artificially inflates attacker balance, enabling repeated unauthorized withdrawals until vault is empty.\"}], \"simulation\": [{\"attack_name\": \"Recursive Balance Drain\", \"succeeded\": true, \"reason\": \"Withdraw function executes external value transfer before updating balances, enabling recursive fallback calls that drain reserves before state deduction.\", \"state_changes\": [\"balances[msg.sender] decremented repeatedly without corresponding balance check\", \"contract ETH reserve depleted to zero\"], \"funds_drained\": true, \"access_gained\": false}, {\"attack_name\": \"Malicious Fallback Lock\", \"succeeded\": true, \"reason\": \"Reverting fallback function on target address causes external transfer to fail, forcing transaction revert and permanently blocking state updates for that address.\", \"state_changes\": [\"withdraw call permanently reverts for targeted address\", \"balances[target] remains unchanged despite initial deposit\", \"deposited funds permanently locked in vault\"], \"funds_drained\": false, \"access_gained\": false}, {\"attack_name\": \"Balance Underflow Exploit\", \"succeeded\": true, \"reason\": \"Lack of explicit balance validation or SafeMath allows subtraction exceeding stored value, triggering uint256 underflow to maximum integer.\", \"state_changes\": [\"balances[msg.sender] wraps to uint256 maximum value\", \"attacker balance artificially inflated\", \"contract ETH reserves drained via subsequent large withdrawals\"], \"funds_drained\": true, \"access_gained\": false}], \"summary\": \"\"}",
+
+    "output_parsed": {
+      "contract_name": "VulnerableVault",
+      "risk_score": 50,
+      "decision": "warn",
+      "findings": [],
+      "attacks_simulated": [
+        {
+          "name": "Recursive Balance Drain",
+          "type": "reentrancy",
+          "target_function": "withdraw",
+          "payload": "Deploy malicious contract with receive() fallback that calls vulnerableVault.withdraw(msg.value). After depositing, trigger initial withdraw. The fallback recursively calls withdraw before balances[msg.sender] is updated.",
+          "expected_impact": "Complete drain of contract ETH reserves by exploiting check-after-call vulnerability."
+        },
+        {
+          "name": "Malicious Fallback Lock",
+          "type": "denial_of_service",
+          "target_function": "withdraw",
+          "payload": "Interact via a contract address containing a fallback function that always reverts. Deposit funds, then call withdraw. The forced revert on the external value transfer permanently blocks state updates.",
+          "expected_impact": "Permanent locking of deposited funds for the targeted address, rendering vault balance inaccessible."
+        },
+        {
+          "name": "Balance Underflow Exploit",
+          "type": "integer_overflow",
+          "target_function": "withdraw",
+          "payload": "Call withdraw with a value larger than the stored balance. In the absence of explicit checks or SafeMath, balances[msg.sender] wraps around to a maximum uint256 value.",
+          "expected_impact": "Artificially inflates attacker balance, enabling repeated unauthorized withdrawals until vault is empty."
+        }
+      ],
+      "simulation": [
+        {
+          "attack_name": "Recursive Balance Drain",
+          "succeeded": true,
+          "reason": "Withdraw function executes external value transfer before updating balances, enabling recursive fallback calls that drain reserves before state deduction.",
+          "state_changes": ["balances[msg.sender] decremented repeatedly without corresponding balance check", "contract ETH reserve depleted to zero"],
+          "funds_drained": true,
+          "access_gained": false
+        },
+        {
+          "attack_name": "Malicious Fallback Lock",
+          "succeeded": true,
+          "reason": "Reverting fallback function on target address causes external transfer to fail, forcing transaction revert and permanently blocking state updates for that address.",
+          "state_changes": ["withdraw call permanently reverts for targeted address", "balances[target] remains unchanged despite initial deposit", "deposited funds permanently locked in vault"],
+          "funds_drained": false,
+          "access_gained": false
+        },
+        {
+          "attack_name": "Balance Underflow Exploit",
+          "succeeded": true,
+          "reason": "Lack of explicit balance validation or SafeMath allows subtraction exceeding stored value, triggering uint256 underflow to maximum integer.",
+          "state_changes": ["balances[msg.sender] wraps to uint256 maximum value", "attacker balance artificially inflated", "contract ETH reserves drained via subsequent large withdrawals"],
+          "funds_drained": true,
+          "access_gained": false
+        }
+      ]
+    },
+
+    "equivalence_principles": {
+      "principle_0_parse_contract": {
+        "contract_name": "VulnerableVault",
+        "language": "solidity",
+        "functions": [
+          {"name": "deposit",  "visibility": "public", "has_access_control": false, "has_external_call": false, "has_value_transfer": true,  "risk_hint": "low"},
+          {"name": "withdraw", "visibility": "public", "has_access_control": false, "has_external_call": true,  "has_value_transfer": true,  "risk_hint": "high"}
+        ],
+        "storage_vars": ["balances"],
+        "access_patterns": ["balances[msg.sender]"],
+        "overall_risk": "high"
+      },
+      "principle_1_generate_attacks": [
+        {"name": "Recursive Balance Drain",  "type": "reentrancy",        "target_function": "withdraw"},
+        {"name": "Malicious Fallback Lock",  "type": "denial_of_service", "target_function": "withdraw"},
+        {"name": "Balance Underflow Exploit","type": "integer_overflow",  "target_function": "withdraw"}
+      ],
+      "principle_2_simulate_attacks": [
+        {"attack_name": "Recursive Balance Drain",   "succeeded": true,  "funds_drained": true,  "access_gained": false},
+        {"attack_name": "Malicious Fallback Lock",   "succeeded": true,  "funds_drained": false, "access_gained": false},
+        {"attack_name": "Balance Underflow Exploit", "succeeded": true,  "funds_drained": true,  "access_gained": false}
+      ],
+      "principle_3_classify": {
+        "findings": [
+          {
+            "attack_name": "Recursive Balance Drain",
+            "severity": "critical",
+            "impact": "Complete drainage of contract ETH reserves via recursive reentrancy in the withdraw function",
+            "complexity": "medium",
+            "score": 95,
+            "recommendation": "Implement checks-effects-interactions pattern and add a ReentrancyGuard modifier to the withdraw function"
+          },
+          {
+            "attack_name": "Malicious Fallback Lock",
+            "severity": "medium",
+            "impact": "Permanent denial of service blocking withdrawals and locking deposited funds for targeted addresses",
+            "complexity": "low",
+            "score": 60,
+            "recommendation": "Adopt a pull-based withdrawal pattern to isolate user fund transfers from state update failures"
+          },
+          {
+            "attack_name": "Balance Underflow Exploit",
+            "severity": "critical",
+            "impact": "Artificial inflation of attacker balance via uint256 underflow enabling unlimited withdrawals",
+            "complexity": "low",
+            "score": 90,
+            "recommendation": "Use SafeMath or Solidity 0.8.x built-in overflow protection and add explicit balance validation"
+          }
+        ]
+      }
+    },
+
+    "consensus": {
+      "path": "PENDING → PROPOSING → COMMITTING → REVEALING (UNDETERMINED → multiple rotations → ACCEPTED)",
+      "note": "Validators ran 4 sequential nondet LLM layers; initial undetermined due to output divergence across models"
+    },
+    "validators": [
+      {"address": "0xC6D4624251A82b9e5410b56578C88f6010f7231d", "model": "openrouter/deepseek/deepseek-v4-pro",        "result": "SUCCESS", "vote": "Disagree"},
+      {"address": "0xbec193F52d0feD547295eF4d04DE184eefc96a34", "model": "openrouter/mistralai/mistral-medium-3-5",   "result": "SUCCESS", "vote": "Disagree"},
+      {"address": "0x59EC93D9f4245dAEbEA0C1522344E0cba3B170EC", "model": "openrouter/anthropic/claude-sonnet-4.6",    "result": "SUCCESS", "vote": "Agree (leader, final)"},
+      {"address": "0x0764d3778B84f73b33381a8DC1D43D023F00365a", "model": "openrouter/anthropic/claude-sonnet-4.6",    "result": "SUCCESS", "vote": "Disagree"},
+      {"address": "0x406A8665963582bB6c665f841aa0CAbA35b88298", "model": "openrouter/moonshotai/kimi-k2.6",           "result": "SUCCESS", "vote": "Disagree"},
+      {"address": "0x629Abcd6B48987ADDad6eA3d3d4E9B001Bba5461", "model": "openrouter/qwen/qwen3.6-plus",             "result": "SUCCESS", "vote": "Disagree"},
+      {"address": "0xAec88A3492C1D3231D2Eac1E563B9dF27F92342A", "model": "openrouter/google/gemini-3-flash-preview",  "result": "SUCCESS", "vote": "Disagree"},
+      {"address": "0x4b26e4C555f70C280912E97ed901dA55758d5255", "model": "openrouter/moonshotai/kimi-k2.6",           "result": "SUCCESS", "vote": "Disagree"}
+    ],
+
+    "_pipeline_stages": [
+      "Layer 1: _parse_contract()     — AST + risk extraction via LLM (Equivalence Principle #0)",
+      "Layer 2: _generate_attacks()   — targeted attack generation   (Equivalence Principle #1)",
+      "Layer 3: _simulate_attacks()   — execution simulation         (Equivalence Principle #2)",
+      "Layer 4: _classify()           — CVSS scoring and findings    (Equivalence Principle #3)"
+    ]
+  },
+
+  "step2_commit_analyze": {
+    "method": "commit_analyze",
+    "type": "write",
+    "timestamp": "12 minutes ago",
+    "input": {
+      "args": [
+        "pragma solidity ^0.8.0;\ncontract VulnerableVault {\n    mapping(address => uint) public balances;\n    function deposit() public payable {\n        balances[msg.sender] += msg.value;\n    }\n    function withdraw(uint amount) public {\n        require(balances[msg.sender] >= amount);\n        payable(msg.sender).call{value: amount}(\"\");\n        balances[msg.sender] -= amount;\n    }\n}",
+        "VulnerableVault",
+        "VulnerableVault",
+        50,
+        "warn",
+        "[]",
+        "[{\"name\":\"Recursive Balance Drain\",\"type\":\"reentrancy\",\"target_function\":\"withdraw\",\"payload\":\"Deploy malicious contract with receive() fallback that calls vulnerableVault.withdraw(msg.value). After depositing, trigger initial withdraw. The fallback recursively calls withdraw before balances[msg.sender] is updated.\",\"expected_impact\":\"Complete drain of contract ETH reserves by exploiting check-after-call vulnerability.\"},{\"name\":\"Malicious Fallback Lock\",\"type\":\"denial_of_service\",\"target_function\":\"withdraw\",\"payload\":\"Interact via a contract address containing a fallback function that always reverts. Deposit funds, then call withdraw. The forced revert on the external value transfer permanently blocks state updates.\",\"expected_impact\":\"Permanent locking of deposited funds for the targeted address, rendering vault balance inaccessible.\"},{\"name\":\"Balance Underflow Exploit\",\"type\":\"integer_overflow\",\"target_function\":\"withdraw\",\"payload\":\"Call withdraw with a value larger than the stored balance. In the absence of explicit checks or SafeMath, balances[msg.sender] wraps around to a maximum uint256 value.\",\"expected_impact\":\"Artificially inflates attacker balance, enabling repeated unauthorized withdrawals until vault is empty.\"}]"
+      ],
+      "method": "commit_analyze"
+    },
+    "transaction_hash": "0xe0290ca354b757c30296f6a01d88d98f0c769f34dad65a31bced6d157e23ddb8",
+    "status": "FINALIZED",
+    "result": "SUCCESS",
+    "output": null,
+    "consensus": {
+      "path": "PENDING → PROPOSING → COMMITTING → REVEALING → ACCEPTED"
+    },
+    "validators": [
+      {"address": "0x8c47DDbfF08d716Ac9Ebdc8109B003C40230b0B8", "model": "openrouter/openai/gpt-5.4",                "result": "SUCCESS", "vote": "Agree"},
+      {"address": "0x0c0D773ed918000202007d06FDBE2E891E50b6C8", "model": "openrouter/moonshotai/kimi-k2.6",          "result": "SUCCESS", "vote": "Agree"},
+      {"address": "0x2Dd0edA0a88238CC2b2EF15b025feA198727d6D9", "model": "openrouter/minimax/minimax-m2.7",          "result": "SUCCESS", "vote": "Agree"},
+      {"address": "0x110DC0862Ae24EF8b5E32bCDc2C8D24CE65028ba", "model": "openrouter/qwen/qwen3.6-plus",            "result": "SUCCESS", "vote": "Agree"},
+      {"address": "0xFe4F7A5a4f5b99bC69552dE8a6Dc5b878C61335F", "model": "openrouter/google/gemini-3-flash-preview", "result": "SUCCESS", "vote": "Agree"}
+    ]
+  },
+
+  "step3_verify_report": {
+    "method": "get_report",
+    "type": "view",
+    "input": {"index": 0},
+    "output_raw": "{\"index\": 0, \"contract_name\": \"VulnerableVault\", \"risk_score\": 50, \"decision\": \"warn\", \"findings\": [], \"attacks\": [{\"name\": \"Recursive Balance Drain\", \"type\": \"reentrancy\", \"target_function\": \"withdraw\", \"payload\": \"Deploy malicious contract with receive() fallback that calls vulnerableVault.withdraw(msg.value). After depositing, trigger initial withdraw. The fallback recursively calls withdraw before balances[msg.sender] is updated.\", \"expected_impact\": \"Complete drain of contract ETH reserves by exploiting check-after-call vulnerability.\"}, {\"name\": \"Malicious Fallback Lock\", \"type\": \"denial_of_service\", \"target_function\": \"withdraw\", \"payload\": \"Interact via a contract address containing a fallback function that always reverts. Deposit funds, then call withdraw. The forced revert on the external value transfer permanently blocks state updates.\", \"expected_impact\": \"Permanent locking of deposited funds for the targeted address, rendering vault balance inaccessible.\"}, {\"name\": \"Balance Underflow Exploit\", \"type\": \"integer_overflow\", \"target_function\": \"withdraw\", \"payload\": \"Call withdraw with a value larger than the stored balance. In the absence of explicit checks or SafeMath, balances[msg.sender] wraps around to a maximum uint256 value.\", \"expected_impact\": \"Artificially inflates attacker balance, enabling repeated unauthorized withdrawals until vault is empty.\"}]}",
+    "_purpose": "Confirms report was persisted to on-chain storage after commit_analyze"
+  }
+}
