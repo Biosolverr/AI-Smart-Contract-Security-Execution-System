@@ -1,4 +1,4 @@
-from security.attacks.exploit_targeting_engine import ExploitTargetingEngine
+from security.attask.exploit_targeting_engine import ExploitTargetingEngine
 
 
 def calculate_cvss_score(attack_vector: float, complexity: float,
