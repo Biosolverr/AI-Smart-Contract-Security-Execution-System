@@ -2,8 +2,8 @@ from analysis.parser.solidity_ast_parser import SolidityASTParser
 from analysis.parser.call_graph_builder import CallGraphBuilder
 from analysis.parser.storage_mapping import StorageMapping
 from analysis.parser.vulnerability_binding import VulnerabilityBinding
-from analysis.graph.graph_engine import GraphEngine
-from security.attacks.exploit_targeting_engine import ExploitTargetingEngine
+from analysis.grapf.graph_engine import GraphEngine
+from security.attask.exploit_targeting_engine import ExploitTargetingEngine
 
 
 class SecurityPipeline:
