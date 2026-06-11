@@ -1,0 +1,36 @@
+{
+  "_description": "GenLayer Studio — FulGenRoute.py deployment on Testnet Bradbury",
+  "network": "Testnet Bradbury",
+  "contract_file": "FulGenRoute.py",
+  "contract_class": "GenRoute",
+
+  "deployment": {
+    "transaction_hash": "0xee5a40319720233058bf33ea87766c589653f2a21a1b450aee58f824d662c669",
+    "contract_address": "0x94...8800",
+    "deployer_address": "0x8D...1233",
+    "status": "FINALIZED",
+    "result": "SUCCESS",
+    "consensus": "ACCEPTED",
+    "consensus_path": "PENDING → PROPOSING → COMMITTING → REVEALING → ACCEPTED"
+  },
+
+  "deploy_validators": [
+    {"address": "0xb9510d7C401DB04781C25756D5fA998ea7E0aab3", "model": "openrouter/deepseek/deepseek-v4-pro",          "result": "SUCCESS", "vote": "Agree"},
+    {"address": "0x82640d7da6B91de501E8Ca4e009F774A8C460DcD", "model": "openrouter/google/gemini-3-flash-preview",     "result": "SUCCESS", "vote": "Agree"},
+    {"address": "0x49f3A9125066FC2e049d7eca9F0c28405182103d", "model": "openrouter/moonshotai/kimi-k2.6",             "result": "SUCCESS", "vote": "Agree"},
+    {"address": "0x8223D877bd0c0c25a88D55960230282047b99029", "model": "openrouter/openai/gpt-5.4",                  "result": "SUCCESS", "vote": "Agree"},
+    {"address": "0x13114432D051FFD4b8bc20d5CC70A76c4A3a676a", "model": "openrouter/anthropic/claude-sonnet-4.6",     "result": "SUCCESS", "vote": "Agree"}
+  ],
+
+  "initial_state": {
+    "routing_threshold": 70,
+    "trace_count": 0,
+    "report_count": 0,
+    "executors": [
+      {"name": "financial_executor",  "description": "Handles payments, DeFi, token transfers, and financial risk",    "cost_tier": 2, "confidence_boost": 10},
+      {"name": "audit_executor",      "description": "Smart contract security analysis and vulnerability scanning",    "cost_tier": 3, "confidence_boost": 15},
+      {"name": "social_executor",     "description": "DAO governance, proposals, voting, and reputation",             "cost_tier": 1, "confidence_boost": 5},
+      {"name": "consensus_executor",  "description": "Safe fallback for ambiguous or high-risk intents",              "cost_tier": 3, "confidence_boost": 20}
+    ]
+  }
+}
